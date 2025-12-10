@@ -160,7 +160,11 @@
                                     @if (trip.IsOnSale)
                                     {
                                         <span class="position-absolute top-0 start-0 badge bg-danger m-2">
-                                            <i class="bi bi-tag"></i> @trip.DiscountPercentage% OFF
+                                            <i class="bi bi-tag"></i> @($"{trip.DiscountPercentage:0}% OFF")
+                                        </span>
+                                        <span class="position-absolute top-0 end-0 badge bg-danger m-2">
+                                            <i class="bi bi-currency-dollar"></i>
+                                            Order NOW and Save: $@(trip.OriginalPrice - trip.Price)
                                         </span>
                                     }
                                     @if (trip.IsFullyBooked)
