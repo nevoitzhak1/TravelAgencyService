@@ -1,0 +1,325 @@
+﻿@model TravelAgencyService.Models.ViewModels.TripListViewModel
+
+@{
+    ViewData["Title"] = "Trip Gallery";
+}
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="display-5">
+                <i class="bi bi-globe"></i> Explore Our Trips
+                <span class="badge bg-primary fs-6">@Model.TotalTrips trips available</span>
+            </h1>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Filters Sidebar -->
+        <div class="col-md-3">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-funnel"></i> Filters</h5>
+                </div>
+                <div class="card-body">
+                    <form asp-action="Index" method="get">
+                        <!-- Search -->
+                        <div class="mb-3">
+                            <label class="form-label">Search</label>
+                            <input type="text" name="searchQuery" class="form-control"
+                                   value="@Model.SearchQuery" placeholder="Destination, country...">
+                        </div>
+
+                        <!-- Country -->
+                        <div class="mb-3">
+                            <label class="form-label">Country</label>
+                            <select name="country" class="form-select">
+                                <option value="">All Countries</option>
+                                @foreach (var c in Model.Countries)
+                                {
+                                    <option value="@c" selected="@(Model.SelectedCountry == c)">@c</option>
+                                }
+                            </select>
+                        </div>
+
+                        <!-- Destination -->
+                        <div class="mb-3">
+                            <label class="form-label">Destination</label>
+                            <select name="destination" class="form-select">
+                                <option value="">All Destinations</option>
+                                @foreach (var d in Model.Destinations)
+                                {
+                                    <option value="@d" selected="@(Model.SelectedDestination == d)">@d</option>
+                                }
+                            </select>
+                        </div>
+
+                        <!-- Package Type -->
+                        <div class="mb-3">
+                            <label class="form-label">Package Type</label>
+                            <select name="packageType" class="form-select">
+                                <option value="">All Types</option>
+                                @foreach (var pt in Enum.GetValues<TravelAgencyService.Models.PackageType>())
+                                {
+                                    <option value="@pt" selected="@(Model.SelectedPackageType == pt)">@pt</option>
+                                }
+                            </select>
+                        </div>
+
+                        <!-- Price Range -->
+                        <div class="mb-3">
+                            <label class="form-label">Price Range ($)</label>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <input type="number" name="minPrice" class="form-control"
+                                           value="@Model.MinPrice" placeholder="Min">
+                                </div>
+                                <div class="col-6">
+                                    <input type="number" name="maxPrice" class="form-control"
+                                           value="@Model.MaxPrice" placeholder="Max">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Date Range -->
+                        <div class="mb-3">
+                            <label class="form-label">Travel Date</label>
+                            <input type="date" name="startDateFrom" class="form-control mb-2"
+                                   value="@Model.StartDateFrom?.ToString("yyyy-MM-dd")">
+                            <input type="date" name="startDateTo" class="form-control"
+                                   value="@Model.StartDateTo?.ToString("yyyy-MM-dd")">
+                        </div>
+
+                        <!-- Only Discounted -->
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" name="onlyDiscounted" value="true"
+                                   class="form-check-input" id="onlyDiscounted"
+                                   @(Model.OnlyDiscounted ? "checked" : "")>
+                            <label class="form-check-label" for="onlyDiscounted">
+                                <i class="bi bi-tag text-danger"></i> On Sale Only
+                            </label>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-search"></i> Apply Filters
+                            </button>
+                            <a asp-action="Index" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i> Clear Filters
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trip Grid -->
+        <div class="col-md-9">
+            <!-- Sort Options -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <p class="mb-0 text-muted">
+                    Showing @((Model.CurrentPage - 1) * Model.PageSize + 1) -
+                    @(Math.Min(Model.CurrentPage * Model.PageSize, Model.TotalTrips)) of @Model.TotalTrips trips
+                </p>
+                <div class="d-flex align-items-center">
+                    <label class="me-2">Sort by:</label>
+                    <select class="form-select form-select-sm" style="width: auto;"
+                            onchange="window.location.href='@Url.Action("Index")?sortBy=' + this.value + '&searchQuery=@Model.SearchQuery&country=@Model.SelectedCountry&packageType=@Model.SelectedPackageType'">
+                        <option value="date" selected="@(Model.SortBy == "date")">Travel Date</option>
+                        <option value="price_asc" selected="@(Model.SortBy == "price_asc")">Price: Low to High</option>
+                        <option value="price_desc" selected="@(Model.SortBy == "price_desc")">Price: High to Low</option>
+                        <option value="popular" selected="@(Model.SortBy == "popular")">Most Popular</option>
+                        <option value="category" selected="@(Model.SortBy == "category")">Category</option>
+                    </select>
+                </div>
+            </div>
+
+            @if (Model.Trips.Any())
+            {
+                <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+                    @foreach (var trip in Model.Trips)
+                    {
+                        <div class="col">
+                            <div class="card h-100 shadow-sm trip-card">
+                                <!-- Trip Image -->
+                                <div class="position-relative">
+                                    @if (!string.IsNullOrEmpty(trip.MainImageUrl))
+                                    {
+                                        <img src="@trip.MainImageUrl" class="card-img-top" alt="@trip.PackageName"
+                                             style="height: 200px; object-fit: cover;">
+                                    }
+                                    else
+                                    {
+                                        <div class="bg-secondary text-white d-flex align-items-center justify-content-center"
+                                             style="height: 200px;">
+                                            <i class="bi bi-image fs-1"></i>
+                                        </div>
+                                    }
+
+                                    <!-- Badges -->
+                                    @if (trip.IsOnSale)
+                                    {
+                                        <span class="position-absolute top-0 start-0 badge bg-danger m-2">
+                                            <i class="bi bi-tag"></i> @trip.DiscountPercentage% OFF
+                                        </span>
+                                    }
+                                    @if (trip.IsFullyBooked)
+                                    {
+                                        <span class="position-absolute top-0 end-0 badge bg-dark m-2">
+                                            Fully Booked
+                                        </span>
+                                    }
+                                    <span class="position-absolute bottom-0 start-0 badge bg-primary m-2">
+                                        @trip.PackageType
+                                    </span>
+                                </div>
+
+                                <div class="card-body">
+                                    <h5 class="card-title">@trip.PackageName</h5>
+                                    <p class="card-text text-muted mb-1">
+                                        <i class="bi bi-geo-alt"></i> @trip.Destination, @trip.Country
+                                    </p>
+                                    <p class="card-text text-muted mb-2">
+                                        <i class="bi bi-calendar"></i>
+                                        @trip.StartDate.ToString("MMM dd") - @trip.EndDate.ToString("MMM dd, yyyy")
+                                        <span class="text-primary">(@trip.TripDurationDays days)</span>
+                                    </p>
+
+                                    <!-- Rating -->
+                                    <div class="mb-2">
+                                        @for (int i = 1; i <= 5; i++)
+                                        {
+                                            if (i <= trip.AverageRating)
+                                            {
+                                                <i class="bi bi-star-fill text-warning"></i>
+                                            }
+                                            else if (i - 0.5 <= trip.AverageRating)
+                                            {
+                                                <i class="bi bi-star-half text-warning"></i>
+                                            }
+                                            else
+                                            {
+                                                <i class="bi bi-star text-warning"></i>
+                                            }
+                                        }
+                                        <small class="text-muted">(@trip.ReviewCount reviews)</small>
+                                    </div>
+
+                                    <!-- Price -->
+                                    <div class="mb-2">
+                                        @if (trip.IsOnSale)
+                                        {
+                                            <span class="text-decoration-line-through text-muted">$@trip.OriginalPrice</span>
+                                            <span class="fs-4 fw-bold text-danger">$@trip.Price</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="fs-4 fw-bold text-primary">$@trip.Price</span>
+                                        }
+                                        <small class="text-muted">/ person</small>
+                                    </div>
+
+                                    <!-- Availability -->
+                                    <p class="mb-0">
+                                        @if (trip.IsFullyBooked)
+                                        {
+                                            <span class="text-danger"><i class="bi bi-x-circle"></i> No rooms available</span>
+                                        }
+                                        else if (trip.AvailableRooms <= 3)
+                                        {
+                                            <span class="text-warning"><i class="bi bi-exclamation-circle"></i> Only @trip.AvailableRooms rooms left!</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-success"><i class="bi bi-check-circle"></i> @trip.AvailableRooms rooms available</span>
+                                        }
+                                    </p>
+                                </div>
+
+                                <div class="card-footer bg-white">
+                                    <div class="d-grid gap-2">
+                                        <a asp-action="Details" asp-route-id="@trip.TripId" class="btn btn-outline-primary">
+                                            <i class="bi bi-eye"></i> View Details
+                                        </a>
+                                        @if (!trip.IsFullyBooked)
+                                        {
+                                            <div class="btn-group">
+                                                <a asp-controller="Booking" asp-action="Book" asp-route-id="@trip.TripId"
+                                                   class="btn btn-primary">
+                                                    <i class="bi bi-calendar-plus"></i> Book
+                                                </a>
+                                                <a asp-controller="Cart" asp-action="Add" asp-route-id="@trip.TripId"
+                                                   class="btn btn-success">
+                                                    <i class="bi bi-cart-plus"></i> Buy Now
+                                                </a>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <a asp-controller="WaitingList" asp-action="Join" asp-route-id="@trip.TripId"
+                                               class="btn btn-secondary">
+                                                <i class="bi bi-hourglass"></i> Join Waiting List
+                                            </a>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- Pagination -->
+                @if (Model.TotalPages > 1)
+                {
+                    <nav class="mt-4">
+                        <ul class="pagination justify-content-center">
+                            <li class="page-item @(Model.CurrentPage == 1 ? "disabled" : "")">
+                                <a class="page-link" asp-action="Index"
+                                   asp-route-page="@(Model.CurrentPage - 1)"
+                                   asp-route-searchQuery="@Model.SearchQuery"
+                                   asp-route-country="@Model.SelectedCountry"
+                                   asp-route-sortBy="@Model.SortBy">Previous</a>
+                            </li>
+                            @for (int i = 1; i <= Model.TotalPages; i++)
+                            {
+                                <li class="page-item @(i == Model.CurrentPage ? "active" : "")">
+                                    <a class="page-link" asp-action="Index"
+                                       asp-route-page="@i"
+                                       asp-route-searchQuery="@Model.SearchQuery"
+                                       asp-route-country="@Model.SelectedCountry"
+                                       asp-route-sortBy="@Model.SortBy">@i</a>
+                                </li>
+                            }
+                            <li class="page-item @(Model.CurrentPage == Model.TotalPages ? "disabled" : "")">
+                                <a class="page-link" asp-action="Index"
+                                   asp-route-page="@(Model.CurrentPage + 1)"
+                                   asp-route-searchQuery="@Model.SearchQuery"
+                                   asp-route-country="@Model.SelectedCountry"
+                                   asp-route-sortBy="@Model.SortBy">Next</a>
+                            </li>
+                        </ul>
+                    </nav>
+                }
+            }
+            else
+            {
+                <div class="text-center py-5">
+                    <i class="bi bi-search fs-1 text-muted"></i>
+                    <h3 class="mt-3">No trips found</h3>
+                    <p class="text-muted">Try adjusting your filters or search query.</p>
+                    <a asp-action="Index" class="btn btn-primary">View All Trips</a>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .trip-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .trip-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+    }
+</style>

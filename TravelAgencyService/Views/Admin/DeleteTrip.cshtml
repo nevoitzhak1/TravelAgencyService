@@ -1,0 +1,55 @@
+﻿@model TravelAgencyService.Models.Trip
+
+@{
+    ViewData["Title"] = "Delete Trip";
+}
+
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Delete Trip</h4>
+                </div>
+                <div class="card-body">
+                    <p class="lead">Are you sure you want to delete this trip?</p>
+
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h5>@Model.PackageName</h5>
+                            <p class="mb-1"><i class="bi bi-geo-alt"></i> @Model.Destination, @Model.Country</p>
+                            <p class="mb-1"><i class="bi bi-calendar"></i> @Model.StartDate.ToString("MMM dd") - @Model.EndDate.ToString("MMM dd, yyyy")</p>
+                            <p class="mb-0"><i class="bi bi-currency-dollar"></i> $@Model.Price</p>
+                        </div>
+                    </div>
+
+                    @if (Model.Bookings != null && Model.Bookings.Any())
+                    {
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-circle"></i>
+                            This trip has <strong>@Model.Bookings.Count</strong> booking(s).
+                            @if (Model.Bookings.Any(b => b.Status == TravelAgencyService.Models.BookingStatus.Confirmed))
+                            {
+                                <br />
+                        
+                                <span class="text-danger">Cannot delete - there are active bookings!</span>
+                            }
+                        </div>
+                    }
+
+                    <form asp-action="DeleteTrip" method="post">
+                        @Html.AntiForgeryToken()
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-danger">
+                                <i class="bi bi-trash"></i> Yes, Delete Trip
+                            </button>
+                            <a asp-action="ManageTrips" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i> Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

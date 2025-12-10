@@ -1,0 +1,277 @@
+﻿@model TravelAgencyService.Models.ViewModels.TripDetailsViewModel
+
+@{
+    ViewData["Title"] = Model.Trip.PackageName;
+}
+
+<div class="container">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a asp-controller="Home" asp-action="Index">Home</a></li>
+            <li class="breadcrumb-item"><a asp-controller="Trip" asp-action="Index">Trips</a></li>
+            <li class="breadcrumb-item active">@Model.Trip.PackageName</li>
+        </ol>
+    </nav>
+
+    <div class="row">
+        <!-- Left Column - Images -->
+        <div class="col-md-7">
+            <div class="card shadow">
+                @if (!string.IsNullOrEmpty(Model.Trip.MainImageUrl))
+                {
+                    <img src="@Model.Trip.MainImageUrl" class="card-img-top" alt="@Model.Trip.PackageName"
+                         style="max-height: 400px; object-fit: cover;">
+                }
+                else
+                {
+                    <div class="bg-secondary text-white d-flex align-items-center justify-content-center"
+                         style="height: 400px;">
+                        <i class="bi bi-image" style="font-size: 5rem;"></i>
+                    </div>
+                }
+
+                @if (Model.Images.Any())
+                {
+                    <div class="card-body">
+                        <div class="row g-2">
+                            @foreach (var image in Model.Images)
+                            {
+                                <div class="col-3">
+                                    <img src="@image.ImageUrl" class="img-thumbnail" alt="@image.Caption"
+                                         style="height: 80px; width: 100%; object-fit: cover; cursor: pointer;"
+                                         onclick="document.querySelector('.card-img-top').src='@image.ImageUrl'">
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Description -->
+            <div class="card shadow mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> Trip Description</h5>
+                </div>
+                <div class="card-body">
+                    <p>@Model.Trip.Description</p>
+                </div>
+            </div>
+
+            <!-- Reviews Section -->
+            <div class="card shadow mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-chat-left-text"></i> Reviews (@Model.Reviews.Count)</h5>
+                    @if (User.Identity?.IsAuthenticated == true)
+                    {
+                        <a asp-controller="Review" asp-action="Create" asp-route-tripId="@Model.Trip.TripId"
+                           class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-plus"></i> Write a Review
+                        </a>
+                    }
+                </div>
+                <div class="card-body">
+                    @if (Model.Reviews.Any())
+                    {
+                        @foreach (var review in Model.Reviews)
+                        {
+                            <div class="border-bottom pb-3 mb-3">
+                                <div class="d-flex justify-content-between">
+                                    <strong>@review.UserName</strong>
+                                    <small class="text-muted">@review.CreatedAt.ToString("MMM dd, yyyy")</small>
+                                </div>
+                                <div class="mb-2">
+                                    @for (int i = 1; i <= 5; i++)
+                                    {
+                                        <i class="bi bi-star@(i <= review.Rating ? "-fill" : "") text-warning"></i>
+                                    }
+                                </div>
+                                @if (!string.IsNullOrEmpty(review.Title))
+                                {
+                                    <h6>@review.Title</h6>
+                                }
+                                <p class="mb-0">@review.Comment</p>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <p class="text-muted text-center">No reviews yet. Be the first to review this trip!</p>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column - Booking Info -->
+        <div class="col-md-5">
+            <div class="card shadow sticky-top" style="top: 20px;">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">@Model.Trip.PackageName</h4>
+                </div>
+                <div class="card-body">
+                    <!-- Location -->
+                    <p class="fs-5 mb-3">
+                        <i class="bi bi-geo-alt text-danger"></i>
+                        @Model.Trip.Destination, @Model.Trip.Country
+                    </p>
+
+                    <!-- Dates -->
+                    <div class="mb-3">
+                        <i class="bi bi-calendar-range text-primary"></i>
+                        <strong>Travel Dates:</strong><br>
+                        <span class="ms-4">
+                            @Model.Trip.StartDate.ToString("MMMM dd, yyyy") -
+                            @Model.Trip.EndDate.ToString("MMMM dd, yyyy")
+                        </span><br>
+                        <span class="ms-4 badge bg-info">@Model.Trip.TripDurationDays days</span>
+                    </div>
+
+                    <!-- Price -->
+                    <div class="mb-3 p-3 bg-light rounded">
+                        <div class="text-center">
+                            @if (Model.Trip.IsOnSale)
+                            {
+                                <span class="text-decoration-line-through text-muted fs-5">$@Model.Trip.OriginalPrice</span>
+                                <span class="badge bg-danger">@Model.Trip.DiscountPercentage% OFF</span>
+                                <div class="fs-2 fw-bold text-danger">$@Model.Trip.Price</div>
+                            }
+                            else
+                            {
+                                <div class="fs-2 fw-bold text-primary">$@Model.Trip.Price</div>
+                            }
+                            <small class="text-muted">per person</small>
+                        </div>
+                    </div>
+
+                    <!-- Rating -->
+                    <div class="mb-3 text-center">
+                        @for (int i = 1; i <= 5; i++)
+                        {
+                            <i class="bi bi-star@(i <= Model.Trip.AverageRating ? "-fill" : "") text-warning fs-5"></i>
+                        }
+                        <span class="ms-2">@Model.Trip.AverageRating / 5</span>
+                        <small class="text-muted">(@Model.Trip.ReviewCount reviews)</small>
+                    </div>
+
+                    <!-- Details -->
+                    <ul class="list-group list-group-flush mb-3">
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span><i class="bi bi-tag"></i> Package Type</span>
+                            <span class="badge bg-primary">@Model.Trip.PackageType</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span><i class="bi bi-door-open"></i> Available Rooms</span>
+                            @if (Model.Trip.IsFullyBooked)
+                            {
+                                <span class="text-danger">Sold Out</span>
+                            }
+                            else if (Model.Trip.AvailableRooms <= 3)
+                            {
+                                <span class="text-warning fw-bold">Only @Model.Trip.AvailableRooms left!</span>
+                            }
+                            else
+                            {
+                                <span class="text-success">@Model.Trip.AvailableRooms</span>
+                            }
+                        </li>
+                        @if (Model.Trip.MinimumAge.HasValue || Model.Trip.MaximumAge.HasValue)
+                        {
+                            <li class="list-group-item d-flex justify-content-between">
+                                <span><i class="bi bi-person"></i> Age Restriction</span>
+                                <span>
+                                    @(Model.Trip.MinimumAge?.ToString() ?? "0") -
+                                    @(Model.Trip.MaximumAge?.ToString() ?? "∞") years
+                                </span>
+                            </li>
+                        }
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span><i class="bi bi-fire"></i> Times Booked</span>
+                            <span>@Model.Trip.TimesBooked</span>
+                        </li>
+                    </ul>
+
+                    <!-- Waiting List Info -->
+                    @if (Model.Trip.IsFullyBooked && Model.WaitingListCount > 0)
+                    {
+                        <div class="alert alert-warning">
+                            <i class="bi bi-hourglass-split"></i>
+                            <strong>@Model.WaitingListCount</strong> people on waiting list
+                        </div>
+                    }
+
+                    @if (Model.IsInWaitingList)
+                    {
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            You are #@Model.WaitingListPosition on the waiting list
+                        </div>
+                    }
+
+                    <!-- Action Buttons -->
+                    <div class="d-grid gap-2">
+                        @if (User.Identity?.IsAuthenticated == true)
+                        {
+                            @if (!Model.Trip.IsFullyBooked)
+                            {
+                                @if (Model.CanBook)
+                                {
+                                    @if (Model.IsInCart)
+                                    {
+                                        <a asp-controller="Cart" asp-action="Index" class="btn btn-secondary btn-lg">
+                                            <i class="bi bi-cart-check"></i> Already in Cart
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <a asp-controller="Booking" asp-action="Book" asp-route-id="@Model.Trip.TripId"
+                                           class="btn btn-primary btn-lg">
+                                            <i class="bi bi-calendar-plus"></i> Book Now
+                                        </a>
+                                        <a asp-controller="Cart" asp-action="Add" asp-route-id="@Model.Trip.TripId"
+                                           class="btn btn-success btn-lg">
+                                            <i class="bi bi-cart-plus"></i> Add to Cart
+                                        </a>
+                                    }
+                                }
+                                else
+                                {
+                                    <div class="alert alert-warning">
+                                        <i class="bi bi-exclamation-triangle"></i>
+                                        You have reached the maximum of 3 active bookings.
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                @if (!Model.IsInWaitingList)
+                                {
+                                    <a asp-controller="WaitingList" asp-action="Join" asp-route-id="@Model.Trip.TripId"
+                                       class="btn btn-warning btn-lg">
+                                        <i class="bi bi-hourglass"></i> Join Waiting List
+                                    </a>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-secondary btn-lg" disabled>
+                                        <i class="bi bi-check-circle"></i> On Waiting List (#@Model.WaitingListPosition)
+                                    </button>
+                                }
+                            }
+                        }
+                        else
+                        {
+                            <a asp-controller="Account" asp-action="Login"
+                               asp-route-returnUrl="@Context.Request.Path"
+                               class="btn btn-primary btn-lg">
+                                <i class="bi bi-box-arrow-in-right"></i> Login to Book
+                            </a>
+                            <a asp-controller="Account" asp-action="Register" class="btn btn-outline-primary">
+                                <i class="bi bi-person-plus"></i> Create Account
+                            </a>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

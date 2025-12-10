@@ -1,0 +1,201 @@
+﻿@model List<TravelAgencyService.Models.ViewModels.TripViewModel>
+
+@{
+    ViewData["Title"] = "Manage Trips";
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-airplane"></i> Manage Trips</h1>
+        <a asp-action="CreateTrip" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Add New Trip
+        </a>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            @TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form asp-action="ManageTrips" method="get" class="row g-3">
+                <div class="col-md-4">
+                    <input type="text" name="searchQuery" class="form-control"
+                           placeholder="Search by name, destination, country..."
+                           value="@ViewBag.SearchQuery">
+                </div>
+                <div class="col-md-3">
+                    <select name="packageType" class="form-select">
+                        <option value="">All Package Types</option>
+                        @foreach (var pt in Enum.GetValues<TravelAgencyService.Models.PackageType>())
+                        {
+                            <option value="@pt" selected="@(ViewBag.PackageType?.ToString() == pt.ToString())">@pt</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search"></i> Search
+                    </button>
+                </div>
+                <div class="col-md-2">
+                    <a asp-action="ManageTrips" class="btn btn-outline-secondary w-100">
+                        <i class="bi bi-x-circle"></i> Clear
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Trip Count -->
+    <p class="text-muted mb-3">Showing @Model.Count of @ViewBag.TotalTrips trips</p>
+
+    <!-- Trips Table -->
+    <div class="card">
+        <div class="card-body">
+            @if (Model.Any())
+            {
+                <table class="table table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Image</th>
+                            <th>Package Name</th>
+                            <th>Destination</th>
+                            <th>Dates</th>
+                            <th>Price</th>
+                            <th>Rooms</th>
+                            <th>Type</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var trip in Model)
+                        {
+                            <tr>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(trip.MainImageUrl))
+                                    {
+                                        <img src="@trip.MainImageUrl" alt="@trip.PackageName"
+                                             style="width: 60px; height: 40px; object-fit: cover;" class="rounded">
+                                    }
+                                    else
+                                    {
+                                        <div class="bg-secondary text-white d-flex align-items-center justify-content-center rounded"
+                                             style="width: 60px; height: 40px;">
+                                            <i class="bi bi-image"></i>
+                                        </div>
+                                    }
+                                </td>
+                                <td>
+                                    <strong>@trip.PackageName</strong>
+                                    @if (trip.IsOnSale)
+                                    {
+                                        <span class="badge bg-danger">SALE</span>
+                                    }
+                                </td>
+                                <td>@trip.Destination, @trip.Country</td>
+                                <td>
+                                    @trip.StartDate.ToString("MMM dd") - @trip.EndDate.ToString("MMM dd, yyyy")
+                                </td>
+                                <td>
+                                    @if (trip.IsOnSale)
+                                    {
+                                        <span class="text-decoration-line-through text-muted">$@trip.OriginalPrice</span>
+                                        <span class="text-danger fw-bold">$@trip.Price</span>
+                                    }
+                                    else
+                                    {
+                                        <span>$@trip.Price</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (trip.AvailableRooms == 0)
+                                    {
+                                        <span class="text-danger">Sold Out</span>
+                                    }
+                                    else if (trip.AvailableRooms <= 3)
+                                    {
+                                        <span class="text-warning">@trip.AvailableRooms left</span>
+                                    }
+                                    else
+                                    {
+                                        <span>@trip.AvailableRooms</span>
+                                    }
+                                </td>
+                                <td><span class="badge bg-primary">@trip.PackageType</span></td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a asp-action="EditTrip" asp-route-id="@trip.TripId"
+                                           class="btn btn-outline-primary" title="Edit">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <a asp-action="SetDiscount" asp-route-id="@trip.TripId"
+                                           class="btn btn-outline-warning" title="Set Discount">
+                                            <i class="bi bi-tag"></i>
+                                        </a>
+                                        @if (trip.IsOnSale)
+                                        {
+                                            <form asp-action="RemoveDiscount" asp-route-id="@trip.TripId"
+                                                  method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-outline-secondary" title="Remove Discount">
+                                                    <i class="bi bi-tag-fill"></i>
+                                                </button>
+                                            </form>
+                                        }
+                                        <a asp-action="DeleteTrip" asp-route-id="@trip.TripId"
+                                           class="btn btn-outline-danger" title="Delete">
+                                            <i class="bi bi-trash"></i>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <!-- Pagination -->
+                @if (ViewBag.TotalPages > 1)
+                {
+                    <nav>
+                        <ul class="pagination justify-content-center">
+                            @for (int i = 1; i <= ViewBag.TotalPages; i++)
+                            {
+                                <li class="page-item @(i == ViewBag.CurrentPage ? "active" : "")">
+                                    <a class="page-link" asp-action="ManageTrips"
+                                       asp-route-page="@i"
+                                       asp-route-searchQuery="@ViewBag.SearchQuery"
+                                       asp-route-packageType="@ViewBag.PackageType">@i</a>
+                                </li>
+                            }
+                        </ul>
+                    </nav>
+                }
+            }
+            else
+            {
+                <div class="text-center py-5">
+                    <i class="bi bi-airplane fs-1 text-muted"></i>
+                    <h4 class="mt-3">No trips found</h4>
+                    <p class="text-muted">Create your first trip to get started.</p>
+                    <a asp-action="CreateTrip" class="btn btn-primary">
+                        <i class="bi bi-plus-circle"></i> Add New Trip
+                    </a>
+                </div>
+            }
+        </div>
+    </div>
+</div>

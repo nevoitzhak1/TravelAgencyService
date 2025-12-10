@@ -1,0 +1,147 @@
+﻿@model TravelAgencyService.Models.ViewModels.UserListViewModel
+
+@{
+    ViewData["Title"] = "Manage Users";
+    var totalPages = (int)Math.Ceiling((double)Model.TotalUsers / Model.PageSize);
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-people"></i> Manage Users</h1>
+        <span class="badge bg-primary fs-6">@Model.TotalUsers total users</span>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            @TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form asp-action="ManageUsers" method="get" class="row g-3">
+                <div class="col-md-5">
+                    <input type="text" name="searchQuery" class="form-control"
+                           placeholder="Search by name or email..."
+                           value="@Model.SearchQuery">
+                </div>
+                <div class="col-md-3">
+                    <select name="roleFilter" class="form-select">
+                        <option value="">All Roles</option>
+                        <option value="Admin" selected="@(Model.RoleFilter == "Admin")">Admin</option>
+                        <option value="User" selected="@(Model.RoleFilter == "User")">User</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search"></i> Search
+                    </button>
+                </div>
+                <div class="col-md-2">
+                    <a asp-action="ManageUsers" class="btn btn-outline-secondary w-100">
+                        <i class="bi bi-x-circle"></i> Clear
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Users Table -->
+    <div class="card">
+        <div class="card-body">
+            @if (Model.Users.Any())
+            {
+                <table class="table table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Registered</th>
+                            <th>Roles</th>
+                            <th>Bookings</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var user in Model.Users)
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@user.FullName</strong>
+                                </td>
+                                <td>@user.Email</td>
+                                <td>@user.RegistrationDate.ToString("MMM dd, yyyy")</td>
+                                <td>
+                                    @foreach (var role in user.Roles)
+                                    {
+                                        <span class="badge @(role == "Admin" ? "bg-danger" : "bg-primary")">@role</span>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="badge bg-info">@user.TotalBookings</span>
+                                </td>
+                                <td>
+                                    @if (user.IsActive)
+                                    {
+                                        <span class="badge bg-success">Active</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a asp-action="UserDetails" asp-route-id="@user.Id"
+                                           class="btn btn-outline-primary" title="View Details">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        <form asp-action="ToggleUserStatus" asp-route-id="@user.Id"
+                                              method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit"
+                                                    class="btn @(user.IsActive ? "btn-outline-warning" : "btn-outline-success")"
+                                                    title="@(user.IsActive ? "Deactivate" : "Activate")">
+                                                <i class="bi @(user.IsActive ? "bi-pause-circle" : "bi-play-circle")"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <!-- Pagination -->
+                @if (totalPages > 1)
+                {
+                    <nav>
+                        <ul class="pagination justify-content-center">
+                            @for (int i = 1; i <= totalPages; i++)
+                            {
+                                <li class="page-item @(i == Model.CurrentPage ? "active" : "")">
+                                    <a class="page-link" asp-action="ManageUsers"
+                                       asp-route-page="@i"
+                                       asp-route-searchQuery="@Model.SearchQuery"
+                                       asp-route-roleFilter="@Model.RoleFilter">@i</a>
+                                </li>
+                            }
+                        </ul>
+                    </nav>
+                }
+            }
+            else
+            {
+                <div class="text-center py-5">
+                    <i class="bi bi-people fs-1 text-muted"></i>
+                    <h4 class="mt-3">No users found</h4>
+                    <p class="text-muted">Try adjusting your search filters.</p>
+                </div>
+            }
+        </div>
+    </div>
+</div>

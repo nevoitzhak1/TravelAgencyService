@@ -1,0 +1,210 @@
+﻿@model TravelAgencyService.Models.ViewModels.BookingListViewModel
+
+@{
+    ViewData["Title"] = "Manage Bookings";
+    var totalPages = (int)Math.Ceiling((double)Model.TotalBookings / Model.PageSize);
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-calendar-check"></i> Manage Bookings</h1>
+        <span class="badge bg-primary fs-6">@Model.TotalBookings total bookings</span>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            @TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form asp-action="ManageBookings" method="get" class="row g-3">
+                <div class="col-md-4">
+                    <input type="text" name="searchQuery" class="form-control"
+                           placeholder="Search by user or trip name..."
+                           value="@Model.SearchQuery">
+                </div>
+                <div class="col-md-3">
+                    <select name="status" class="form-select">
+                        <option value="">All Statuses</option>
+                        @foreach (var status in Enum.GetValues<TravelAgencyService.Models.BookingStatus>())
+                        {
+                            <option value="@status" selected="@(Model.StatusFilter == status)">@status</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search"></i> Search
+                    </button>
+                </div>
+                <div class="col-md-2">
+                    <a asp-action="ManageBookings" class="btn btn-outline-secondary w-100">
+                        <i class="bi bi-x-circle"></i> Clear
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body text-center">
+                    <h4>@Model.Bookings.Count(b => b.Status == TravelAgencyService.Models.BookingStatus.Confirmed)</h4>
+                    <small>Confirmed</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark">
+                <div class="card-body text-center">
+                    <h4>@Model.Bookings.Count(b => b.Status == TravelAgencyService.Models.BookingStatus.Pending)</h4>
+                    <small>Pending</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body text-center">
+                    <h4>@Model.Bookings.Count(b => b.Status == TravelAgencyService.Models.BookingStatus.Cancelled)</h4>
+                    <small>Cancelled</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body text-center">
+                    <h4>@Model.Bookings.Count(b => b.IsPaid)</h4>
+                    <small>Paid</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bookings Table -->
+    <div class="card">
+        <div class="card-body">
+            @if (Model.Bookings.Any())
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>ID</th>
+                                <th>User</th>
+                                <th>Trip</th>
+                                <th>Booking Date</th>
+                                <th>Trip Date</th>
+                                <th>Rooms</th>
+                                <th>Total</th>
+                                <th>Payment</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var booking in Model.Bookings)
+                            {
+                                <tr>
+                                    <td><strong>#@booking.BookingId</strong></td>
+                                    <td>
+                                        <a asp-action="UserDetails" asp-route-id="@booking.UserId">
+                                            @booking.UserName
+                                        </a>
+                                        <br />
+                                        <small class="text-muted">@booking.UserEmail</small>
+                                    </td>
+                                    <td>
+                                        <a asp-controller="Trip" asp-action="Details" asp-route-id="@booking.TripId">
+                                            @booking.TripName
+                                        </a>
+                                    </td>
+                                    <td>@booking.BookingDate.ToString("MMM dd, yyyy")</td>
+                                    <td>@booking.TripStartDate.ToString("MMM dd, yyyy")</td>
+                                    <td>@booking.NumberOfRooms</td>
+                                    <td><strong>$@booking.TotalPrice</strong></td>
+                                    <td>
+                                        @if (booking.IsPaid)
+                                        {
+                                            <span class="badge bg-success">
+                                                <i class="bi bi-check-circle"></i> Paid
+                                            </span>
+                                            @if (booking.PaymentDate.HasValue)
+                                            {
+                                                <br />
+                                                <small class="text-muted">@booking.PaymentDate.Value.ToString("MMM dd")</small>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">
+                                                <i class="bi bi-x-circle"></i> Unpaid
+                                            </span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @switch (booking.Status)
+                                        {
+                                            case TravelAgencyService.Models.BookingStatus.Confirmed:
+                                                <span class="badge bg-success">Confirmed</span>
+                                                break;
+                                            case TravelAgencyService.Models.BookingStatus.Pending:
+                                                <span class="badge bg-warning text-dark">Pending</span>
+                                                break;
+                                            case TravelAgencyService.Models.BookingStatus.Cancelled:
+                                                <span class="badge bg-danger">Cancelled</span>
+                                                break;
+                                            case TravelAgencyService.Models.BookingStatus.Completed:
+                                                <span class="badge bg-info">Completed</span>
+                                                break;
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a asp-action="UserDetails" asp-route-id="@booking.UserId"
+                                               class="btn btn-outline-primary" title="View User">
+                                                <i class="bi bi-person"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                @if (totalPages > 1)
+                {
+                    <nav>
+                        <ul class="pagination justify-content-center">
+                            @for (int i = 1; i <= totalPages; i++)
+                            {
+                                <li class="page-item @(i == Model.CurrentPage ? "active" : "")">
+                                    <a class="page-link" asp-action="ManageBookings"
+                                       asp-route-page="@i"
+                                       asp-route-status="@Model.StatusFilter"
+                                       asp-route-searchQuery="@Model.SearchQuery">@i</a>
+                                </li>
+                            }
+                        </ul>
+                    </nav>
+                }
+            }
+            else
+            {
+                <div class="text-center py-5">
+                    <i class="bi bi-calendar-x fs-1 text-muted"></i>
+                    <h4 class="mt-3">No bookings found</h4>
+                    <p class="text-muted">Try adjusting your search filters.</p>
+                </div>
+            }
+        </div>
+    </div>
+</div>

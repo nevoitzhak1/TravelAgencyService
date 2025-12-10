@@ -1,0 +1,63 @@
+﻿@model TravelAgencyService.Models.ViewModels.TripDiscountViewModel
+
+@{
+    ViewData["Title"] = "Set Discount";
+}
+
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h4 class="mb-0"><i class="bi bi-tag"></i> Set Discount</h4>
+                </div>
+                <div class="card-body">
+                    <h5 class="mb-3">@Model.PackageName</h5>
+                    <p class="text-muted">Current Price: <strong>$@Model.CurrentPrice</strong></p>
+
+                    <form asp-action="SetDiscount" method="post">
+                        <input type="hidden" asp-for="TripId" />
+                        <input type="hidden" asp-for="PackageName" />
+                        <input type="hidden" asp-for="CurrentPrice" />
+
+                        <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                        <div class="mb-3">
+                            <label asp-for="DiscountedPrice" class="form-label"></label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input asp-for="DiscountedPrice" class="form-control" type="number" step="0.01" />
+                            </div>
+                            <span asp-validation-for="DiscountedPrice" class="text-danger"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="DiscountEndDate" class="form-label"></label>
+                            <input asp-for="DiscountEndDate" class="form-control" type="datetime-local" />
+                            <span asp-validation-for="DiscountEndDate" class="text-danger"></span>
+                            <small class="text-muted">Maximum 7 days from now</small>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            The original price will be shown with a strikethrough, and the discounted price will be highlighted.
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-warning">
+                                <i class="bi bi-tag"></i> Apply Discount
+                            </button>
+                            <a asp-action="ManageTrips" class="btn btn-outline-secondary">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

@@ -1,0 +1,196 @@
+﻿@model TravelAgencyService.Models.ViewModels.UserDetailsViewModel
+
+@{
+    ViewData["Title"] = "User Details";
+}
+
+<div class="container">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a asp-action="Dashboard">Dashboard</a></li>
+            <li class="breadcrumb-item"><a asp-action="ManageUsers">Manage Users</a></li>
+            <li class="breadcrumb-item active">User Details</li>
+        </ol>
+    </nav>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            @TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="row">
+        <!-- User Info Card -->
+        <div class="col-md-4">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-person-circle"></i> User Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="text-center mb-3">
+                        <i class="bi bi-person-circle" style="font-size: 5rem; color: #ccc;"></i>
+                        <h4 class="mt-2">@Model.FirstName @Model.LastName</h4>
+                        <p class="text-muted">@Model.Email</p>
+                        @foreach (var role in Model.Roles)
+                        {
+                            <span class="badge @(role == "Admin" ? "bg-danger" : "bg-primary") fs-6">@role</span>
+                        }
+                    </div>
+
+                    <hr />
+
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span><i class="bi bi-calendar"></i> Registered</span>
+                            <span>@Model.RegistrationDate.ToString("MMM dd, yyyy")</span>
+                        </li>
+                        @if (Model.DateOfBirth.HasValue)
+                        {
+                            <li class="list-group-item d-flex justify-content-between">
+                                <span><i class="bi bi-cake"></i> Date of Birth</span>
+                                <span>@Model.DateOfBirth.Value.ToString("MMM dd, yyyy")</span>
+                            </li>
+                        }
+                        @if (!string.IsNullOrEmpty(Model.Address))
+                        {
+                            <li class="list-group-item">
+                                <i class="bi bi-geo-alt"></i> Address<br />
+                                <small class="text-muted">@Model.Address</small>
+                            </li>
+                        }
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span><i class="bi bi-shield-check"></i> Status</span>
+                            @if (Model.IsActive)
+                            {
+                                <span class="badge bg-success">Active</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">Inactive</span>
+                            }
+                        </li>
+                    </ul>
+
+                    <hr />
+
+                    <!-- Actions -->
+                    <div class="d-grid gap-2">
+                        <form asp-action="ToggleUserStatus" asp-route-id="@Model.Id" method="post">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn @(Model.IsActive ? "btn-warning" : "btn-success") w-100">
+                                <i class="bi @(Model.IsActive ? "bi-pause-circle" : "bi-play-circle")"></i>
+                                @(Model.IsActive ? "Deactivate User" : "Activate User")
+                            </button>
+                        </form>
+
+                        <!-- Change Role -->
+                        <div class="dropdown">
+                            <button class="btn btn-outline-primary w-100 dropdown-toggle" type="button"
+                                    data-bs-toggle="dropdown">
+                                <i class="bi bi-shield"></i> Change Role
+                            </button>
+                            <ul class="dropdown-menu w-100">
+                                <li>
+                                    <form asp-action="ChangeUserRole" method="post">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="userId" value="@Model.Id" />
+                                        <input type="hidden" name="newRole" value="Admin" />
+                                        <button type="submit" class="dropdown-item">
+                                            <i class="bi bi-shield-fill text-danger"></i> Make Admin
+                                        </button>
+                                    </form>
+                                </li>
+                                <li>
+                                    <form asp-action="ChangeUserRole" method="post">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="userId" value="@Model.Id" />
+                                        <input type="hidden" name="newRole" value="User" />
+                                        <button type="submit" class="dropdown-item">
+                                            <i class="bi bi-person text-primary"></i> Make User
+                                        </button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Booking History -->
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-calendar-check"></i> Booking History
+                        <span class="badge bg-primary">@Model.Bookings.Count bookings</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    @if (Model.Bookings.Any())
+                    {
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Trip</th>
+                                    <th>Booking Date</th>
+                                    <th>Travel Dates</th>
+                                    <th>Rooms</th>
+                                    <th>Total</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var booking in Model.Bookings)
+                                {
+                                    <tr>
+                                        <td><strong>@booking.TripName</strong></td>
+                                        <td>@booking.BookingDate.ToString("MMM dd, yyyy")</td>
+                                        <td>
+                                            @booking.TripStartDate.ToString("MMM dd") -
+                                            @booking.TripEndDate.ToString("MMM dd, yyyy")
+                                        </td>
+                                        <td>@booking.NumberOfRooms</td>
+                                        <td>
+                                            $@booking.TotalPrice
+                                            @if (booking.IsPaid)
+                                            {
+                                                <i class="bi bi-check-circle text-success" title="Paid"></i>
+                                            }
+                                        </td>
+                                        <td>
+                                            @switch (booking.Status)
+                                            {
+                                                case TravelAgencyService.Models.BookingStatus.Confirmed:
+                                                    <span class="badge bg-success">Confirmed</span>
+                                                    break;
+                                                case TravelAgencyService.Models.BookingStatus.Pending:
+                                                    <span class="badge bg-warning">Pending</span>
+                                                    break;
+                                                case TravelAgencyService.Models.BookingStatus.Cancelled:
+                                                    <span class="badge bg-danger">Cancelled</span>
+                                                    break;
+                                                case TravelAgencyService.Models.BookingStatus.Completed:
+                                                    <span class="badge bg-info">Completed</span>
+                                                    break;
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <div class="text-center py-4">
+                            <i class="bi bi-calendar-x fs-1 text-muted"></i>
+                            <p class="mt-2 text-muted">This user has no bookings yet.</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
