@@ -11,6 +11,13 @@
                 <h4 class="mb-0">Login</h4>
             </div>
             <div class="card-body">
+                @if (Context.Request.Query["deactivated"] == "true")
+                {
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        Your account has been deactivated. Please contact support for assistance.
+                    </div>
+                }
                 <form asp-action="Login" method="post">
                     <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
                     <input type="hidden" name="returnUrl" value="@ViewData["ReturnUrl"]" />

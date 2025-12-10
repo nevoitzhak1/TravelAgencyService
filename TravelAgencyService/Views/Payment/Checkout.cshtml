@@ -1,0 +1,178 @@
+﻿@model TravelAgencyService.Models.ViewModels.CheckoutViewModel
+
+@{
+    ViewData["Title"] = "Checkout";
+}
+
+<div class="container">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a asp-controller="Booking" asp-action="MyBookings">My Bookings</a></li>
+            <li class="breadcrumb-item active">Checkout</li>
+        </ol>
+    </nav>
+
+    <div class="row">
+        <div class="col-md-7">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><i class="bi bi-credit-card"></i> Payment Details</h4>
+                </div>
+                <div class="card-body">
+                    <!-- SSL Badge -->
+                    <div class="alert alert-success d-flex align-items-center mb-4">
+                        <i class="bi bi-shield-lock fs-4 me-2"></i>
+                        <div>
+                            <strong>Secure Payment</strong><br>
+                            <small>Your payment information is encrypted with SSL</small>
+                        </div>
+                    </div>
+
+                    <form asp-action="Checkout" method="post">
+                        <input type="hidden" asp-for="BookingId" />
+                        <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                        <div class="mb-3">
+                            <label asp-for="CardholderName" class="form-label"></label>
+                            <input asp-for="CardholderName" class="form-control" placeholder="John Smith" />
+                            <span asp-validation-for="CardholderName" class="text-danger"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="CardNumber" class="form-label"></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-credit-card"></i></span>
+                                <input asp-for="CardNumber" class="form-control" placeholder="4111 1111 1111 1111"
+                                       maxlength="19" />
+                            </div>
+                            <span asp-validation-for="CardNumber" class="text-danger"></span>
+                            <small class="text-muted">For testing, use: 4111111111111111</small>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label asp-for="ExpiryMonth" class="form-label"></label>
+                                <select asp-for="ExpiryMonth" class="form-select">
+                                    <option value="">Month</option>
+                                    @for (int i = 1; i <= 12; i++)
+                                    {
+                                        <option value="@i">@i.ToString("00")</option>
+                                    }
+                                </select>
+                                <span asp-validation-for="ExpiryMonth" class="text-danger"></span>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label asp-for="ExpiryYear" class="form-label"></label>
+                                <select asp-for="ExpiryYear" class="form-select">
+                                    <option value="">Year</option>
+                                    @for (int i = DateTime.Now.Year; i <= DateTime.Now.Year + 10; i++)
+                                    {
+                                        <option value="@i">@i</option>
+                                    }
+                                </select>
+                                <span asp-validation-for="ExpiryYear" class="text-danger"></span>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label asp-for="CVV" class="form-label"></label>
+                                <input asp-for="CVV" class="form-control" placeholder="123" maxlength="4" />
+                                <span asp-validation-for="CVV" class="text-danger"></span>
+                            </div>
+                        </div>
+
+                        <hr />
+
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <span class="fs-5">Total to Pay:</span>
+                            <span class="fs-4 fw-bold text-primary">$@Model.TotalPrice</span>
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="bi bi-lock"></i> Pay $@Model.TotalPrice
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="text-center mt-3">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Visa_Inc._logo.svg/100px-Visa_Inc._logo.svg.png"
+                             alt="Visa" class="me-2" style="height: 25px;">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Mastercard-logo.svg/100px-Mastercard-logo.svg.png"
+                             alt="Mastercard" class="me-2" style="height: 25px;">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/PayPal.svg/100px-PayPal.svg.png"
+                             alt="PayPal" style="height: 25px;">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Order Summary -->
+        <div class="col-md-5">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-receipt"></i> Order Summary</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-4">
+                            @if (!string.IsNullOrEmpty(Model.MainImageUrl))
+                            {
+                                <img src="@Model.MainImageUrl" class="img-fluid rounded" alt="@Model.PackageName">
+                            }
+                            else
+                            {
+                                <div class="bg-secondary rounded d-flex align-items-center justify-content-center"
+                                     style="height: 80px;">
+                                    <i class="bi bi-image text-white"></i>
+                                </div>
+                            }
+                        </div>
+                        <div class="col-8">
+                            <h6 class="mb-1">@Model.PackageName</h6>
+                            <small class="text-muted">
+                                <i class="bi bi-geo-alt"></i> @Model.Destination, @Model.Country
+                            </small>
+                        </div>
+                    </div>
+
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between px-0">
+                            <span>Travel Dates</span>
+                            <span>@Model.StartDate.ToString("MMM dd") - @Model.EndDate.ToString("MMM dd")</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between px-0">
+                            <span>Rooms</span>
+                            <span>@Model.NumberOfRooms</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between px-0">
+                            <span>Booking ID</span>
+                            <span>#@Model.BookingId</span>
+                        </li>
+                    </ul>
+
+                    <hr />
+
+                    <div class="d-flex justify-content-between fw-bold fs-5">
+                        <span>Total</span>
+                        <span class="text-primary">$@Model.TotalPrice</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h6><i class="bi bi-shield-check text-success"></i> Secure Booking Guarantee</h6>
+                    <ul class="small text-muted mb-0">
+                        <li>256-bit SSL encryption</li>
+                        <li>No credit card data stored</li>
+                        <li>Instant confirmation</li>
+                        <li>Free cancellation (within policy)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}
