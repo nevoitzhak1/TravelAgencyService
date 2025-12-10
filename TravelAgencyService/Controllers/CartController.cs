@@ -1,0 +1,363 @@
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
+using TravelAgencyService.Data;
+using TravelAgencyService.Models;
+using TravelAgencyService.Models.ViewModels;
+
+namespace TravelAgencyService.Controllers
+{
+    [Authorize]
+    public class CartController : Controller
+    {
+        private readonly ApplicationDbContext _context;
+
+        public CartController(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        // GET: /Cart
+        public async Task<IActionResult> Index()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var cartItems = await _context.CartItems
+                .Include(c => c.Trip)
+                .Where(c => c.UserId == userId)
+                .OrderByDescending(c => c.AddedDate)
+                .ToListAsync();
+
+            var viewModel = new CartViewModel
+            {
+                Items = cartItems.Select(c => new CartItemViewModel
+                {
+                    CartItemId = c.CartItemId,
+                    TripId = c.TripId,
+                    PackageName = c.Trip?.PackageName ?? "",
+                    Destination = c.Trip?.Destination ?? "",
+                    Country = c.Trip?.Country ?? "",
+                    StartDate = c.Trip?.StartDate ?? DateTime.MinValue,
+                    EndDate = c.Trip?.EndDate ?? DateTime.MinValue,
+                    PricePerPerson = c.Trip?.Price ?? 0,
+                    OriginalPrice = c.Trip?.OriginalPrice,
+                    IsOnSale = c.Trip?.IsOnSale ?? false,
+                    NumberOfRooms = c.NumberOfRooms,
+                    MainImageUrl = c.Trip?.MainImageUrl,
+                    AvailableRooms = c.Trip?.AvailableRooms ?? 0,
+                    IsStillAvailable = c.Trip != null &&
+                                       c.Trip.IsVisible &&
+                                       c.Trip.AvailableRooms >= c.NumberOfRooms &&
+                                       c.Trip.StartDate > DateTime.Now,
+                    AddedDate = c.AddedDate
+                }).ToList()
+            };
+
+            return View(viewModel);
+        }
+
+        // GET: /Cart/Add/5
+        public async Task<IActionResult> Add(int id, int rooms = 1)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            // Check if already in cart
+            var existingItem = await _context.CartItems
+                .FirstOrDefaultAsync(c => c.UserId == userId && c.TripId == id);
+
+            if (existingItem != null)
+            {
+                TempData["Info"] = "This trip is already in your cart.";
+                return RedirectToAction("Index");
+            }
+
+            var trip = await _context.Trips.FindAsync(id);
+
+            if (trip == null)
+            {
+                return NotFound();
+            }
+
+            if (!trip.IsVisible || trip.AvailableRooms <= 0 || trip.StartDate <= DateTime.Now)
+            {
+                TempData["Error"] = "This trip is not available for booking.";
+                return RedirectToAction("Details", "Trip", new { id });
+            }
+
+            var cartItem = new CartItem
+            {
+                UserId = userId!,
+                TripId = id,
+                NumberOfRooms = Math.Min(rooms, trip.AvailableRooms),
+                PriceWhenAdded = trip.Price,
+                AddedDate = DateTime.Now
+            };
+
+            _context.CartItems.Add(cartItem);
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] = $"'{trip.PackageName}' has been added to your cart.";
+            return RedirectToAction("Index");
+        }
+
+        // POST: /Cart/UpdateQuantity
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateQuantity(int cartItemId, int numberOfRooms)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var cartItem = await _context.CartItems
+                .Include(c => c.Trip)
+                .FirstOrDefaultAsync(c => c.CartItemId == cartItemId && c.UserId == userId);
+
+            if (cartItem == null)
+            {
+                return NotFound();
+            }
+
+            if (cartItem.Trip != null && numberOfRooms > cartItem.Trip.AvailableRooms)
+            {
+                TempData["Error"] = $"Only {cartItem.Trip.AvailableRooms} rooms are available.";
+                return RedirectToAction("Index");
+            }
+
+            if (numberOfRooms < 1)
+            {
+                numberOfRooms = 1;
+            }
+            else if (numberOfRooms > 10)
+            {
+                numberOfRooms = 10;
+            }
+
+            cartItem.NumberOfRooms = numberOfRooms;
+            await _context.SaveChangesAsync();
+
+            return RedirectToAction("Index");
+        }
+
+        // POST: /Cart/Remove/5
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Remove(int id)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var cartItem = await _context.CartItems
+                .Include(c => c.Trip)
+                .FirstOrDefaultAsync(c => c.CartItemId == id && c.UserId == userId);
+
+            if (cartItem == null)
+            {
+                return NotFound();
+            }
+
+            var tripName = cartItem.Trip?.PackageName ?? "Trip";
+
+            _context.CartItems.Remove(cartItem);
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] = $"'{tripName}' has been removed from your cart.";
+            return RedirectToAction("Index");
+        }
+
+        // POST: /Cart/Clear
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Clear()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var cartItems = await _context.CartItems
+                .Where(c => c.UserId == userId)
+                .ToListAsync();
+
+            _context.CartItems.RemoveRange(cartItems);
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] = "Your cart has been cleared.";
+            return RedirectToAction("Index");
+        }
+
+        // GET: /Cart/Checkout
+        public async Task<IActionResult> Checkout()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var cartItems = await _context.CartItems
+                .Include(c => c.Trip)
+                .Where(c => c.UserId == userId)
+                .ToListAsync();
+
+            if (!cartItems.Any())
+            {
+                TempData["Error"] = "Your cart is empty.";
+                return RedirectToAction("Index");
+            }
+
+            // Validate all items are still available
+            var unavailableItems = cartItems.Where(c =>
+                c.Trip == null ||
+                !c.Trip.IsVisible ||
+                c.Trip.AvailableRooms < c.NumberOfRooms ||
+                c.Trip.StartDate <= DateTime.Now).ToList();
+
+            if (unavailableItems.Any())
+            {
+                TempData["Error"] = "Some items in your cart are no longer available. Please review your cart.";
+                return RedirectToAction("Index");
+            }
+
+            // Check max 3 bookings rule
+            var activeBookingsCount = await _context.Bookings
+                .CountAsync(b => b.UserId == userId &&
+                                 b.Status == BookingStatus.Confirmed &&
+                                 b.Trip!.StartDate > DateTime.Now);
+
+            if (activeBookingsCount + cartItems.Count > 3)
+            {
+                TempData["Error"] = $"You can only have 3 active bookings at a time. You currently have {activeBookingsCount}.";
+                return RedirectToAction("Index");
+            }
+
+            var viewModel = new CartCheckoutViewModel
+            {
+                Items = cartItems.Select(c => new CartItemViewModel
+                {
+                    CartItemId = c.CartItemId,
+                    TripId = c.TripId,
+                    PackageName = c.Trip?.PackageName ?? "",
+                    Destination = c.Trip?.Destination ?? "",
+                    Country = c.Trip?.Country ?? "",
+                    StartDate = c.Trip?.StartDate ?? DateTime.MinValue,
+                    EndDate = c.Trip?.EndDate ?? DateTime.MinValue,
+                    PricePerPerson = c.Trip?.Price ?? 0,
+                    NumberOfRooms = c.NumberOfRooms,
+                    MainImageUrl = c.Trip?.MainImageUrl
+                }).ToList()
+            };
+
+            return View(viewModel);
+        }
+
+        // POST: /Cart/Checkout
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Checkout(CartCheckoutViewModel model)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var cartItems = await _context.CartItems
+                .Include(c => c.Trip)
+                .Where(c => c.UserId == userId)
+                .ToListAsync();
+
+            if (!cartItems.Any())
+            {
+                TempData["Error"] = "Your cart is empty.";
+                return RedirectToAction("Index");
+            }
+
+            // Validate expiry date
+            var currentDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+            var expiryDate = new DateTime(model.ExpiryYear, model.ExpiryMonth, 1);
+
+            if (expiryDate < currentDate)
+            {
+                ModelState.AddModelError("ExpiryMonth", "Card has expired");
+            }
+
+            if (ModelState.IsValid)
+            {
+                // Simulate payment
+                if (model.CardNumber.StartsWith("0000"))
+                {
+                    ModelState.AddModelError("", "Payment failed. Please check your card details.");
+                }
+                else
+                {
+                    using var transaction = await _context.Database.BeginTransactionAsync();
+
+                    try
+                    {
+                        var bookingIds = new List<int>();
+                        var cardLastFour = model.CardNumber.Substring(model.CardNumber.Length - 4);
+
+                        foreach (var item in cartItems)
+                        {
+                            if (item.Trip == null) continue;
+
+                            // Re-check availability
+                            var trip = await _context.Trips.FindAsync(item.TripId);
+                            if (trip == null || trip.AvailableRooms < item.NumberOfRooms)
+                            {
+                                await transaction.RollbackAsync();
+                                TempData["Error"] = $"'{item.Trip.PackageName}' is no longer available with the requested rooms.";
+                                return RedirectToAction("Index");
+                            }
+
+                            // Create booking
+                            var booking = new Booking
+                            {
+                                UserId = userId!,
+                                TripId = item.TripId,
+                                NumberOfRooms = item.NumberOfRooms,
+                                TotalPrice = trip.Price * item.NumberOfRooms,
+                                BookingDate = DateTime.Now,
+                                Status = BookingStatus.Confirmed,
+                                IsPaid = true,
+                                PaymentDate = DateTime.Now,
+                                CardLastFourDigits = cardLastFour,
+                                CreatedAt = DateTime.Now,
+                                UpdatedAt = DateTime.Now
+                            };
+
+                            // Update trip
+                            trip.AvailableRooms -= item.NumberOfRooms;
+                            trip.TimesBooked++;
+                            trip.UpdatedAt = DateTime.Now;
+
+                            _context.Bookings.Add(booking);
+                            await _context.SaveChangesAsync();
+                            bookingIds.Add(booking.BookingId);
+                        }
+
+                        // Clear cart
+                        _context.CartItems.RemoveRange(cartItems);
+                        await _context.SaveChangesAsync();
+
+                        await transaction.CommitAsync();
+
+                        TempData["Success"] = $"Payment successful! {bookingIds.Count} booking(s) confirmed.";
+                        return RedirectToAction("MyBookings", "Booking");
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync();
+                        TempData["Error"] = "An error occurred while processing your payment.";
+                        return RedirectToAction("Index");
+                    }
+                }
+            }
+
+            // Reload items for view
+            model.Items = cartItems.Select(c => new CartItemViewModel
+            {
+                CartItemId = c.CartItemId,
+                TripId = c.TripId,
+                PackageName = c.Trip?.PackageName ?? "",
+                Destination = c.Trip?.Destination ?? "",
+                Country = c.Trip?.Country ?? "",
+                StartDate = c.Trip?.StartDate ?? DateTime.MinValue,
+                EndDate = c.Trip?.EndDate ?? DateTime.MinValue,
+                PricePerPerson = c.Trip?.Price ?? 0,
+                NumberOfRooms = c.NumberOfRooms,
+                MainImageUrl = c.Trip?.MainImageUrl
+            }).ToList();
+
+            return View(model);
+        }
+    }
+}

@@ -45,12 +45,12 @@ namespace TravelAgencyService.Models.ViewModels
         [Required(ErrorMessage = "Start date is required")]
         [DataType(DataType.Date)]
         [Display(Name = "Start Date")]
-        public DateTime StartDate { get; set; } = DateTime.Now.AddDays(30);
+        public DateTime StartDate { get; set; } = DateTime.Today;
 
         [Required(ErrorMessage = "End date is required")]
         [DataType(DataType.Date)]
         [Display(Name = "End Date")]
-        public DateTime EndDate { get; set; } = DateTime.Now.AddDays(37);
+        public DateTime EndDate { get; set; } = DateTime.Today.AddDays(7);
 
         [Required(ErrorMessage = "Price is required")]
         [Range(1, 1000000, ErrorMessage = "Price must be positive")]

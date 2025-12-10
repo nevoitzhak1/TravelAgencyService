@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using TravelAgencyService.Data;
+using TravelAgencyService.Middleware;
 using TravelAgencyService.Models;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -63,6 +64,7 @@ app.UseStaticFiles();
 app.UseRouting();
 
 app.UseAuthentication();
+app.UseUserStatusCheck();
 app.UseAuthorization();
 
 app.MapControllerRoute(

@@ -1,0 +1,85 @@
+﻿@model TravelAgencyService.Models.ViewModels.JoinWaitingListViewModel
+
+@{
+    ViewData["Title"] = "Join Waiting List";
+}
+
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h4 class="mb-0"><i class="bi bi-hourglass-split"></i> Join Waiting List</h4>
+                </div>
+                <div class="card-body">
+                    <div class="text-center mb-4">
+                        @if (!string.IsNullOrEmpty(Model.MainImageUrl))
+                        {
+                            <img src="@Model.MainImageUrl" class="img-fluid rounded mb-3"
+                                 style="max-height: 200px; object-fit: cover;" alt="@Model.PackageName">
+                        }
+                        <h5>@Model.PackageName</h5>
+                        <p class="text-muted">
+                            <i class="bi bi-geo-alt"></i> @Model.Destination, @Model.Country
+                        </p>
+                        <p class="text-muted">
+                            <i class="bi bi-calendar"></i>
+                            @Model.StartDate.ToString("MMM dd") - @Model.EndDate.ToString("MMM dd, yyyy")
+                        </p>
+                        <p class="fs-5">
+                            <strong>$@Model.Price</strong> / person
+                        </p>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        This trip is currently fully booked. Join the waiting list and we'll notify you when a room becomes available.
+                        <br><br>
+                        <strong>@Model.CurrentWaitingCount</strong> people are currently on the waiting list.
+                    </div>
+
+                    <form asp-action="JoinWaitingList" method="post">
+                        <input type="hidden" asp-for="TripId" />
+                        <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                        <div class="mb-3">
+                            <label asp-for="RoomsRequested" class="form-label"></label>
+                            <select asp-for="RoomsRequested" class="form-select">
+                                @for (int i = 1; i <= 10; i++)
+                                {
+                                    <option value="@i">@i room(s)</option>
+                                }
+                            </select>
+                            <span asp-validation-for="RoomsRequested" class="text-danger"></span>
+                            <small class="text-muted">Select how many rooms you need when available</small>
+                        </div>
+
+                        <div class="alert alert-warning">
+                            <h6><i class="bi bi-exclamation-triangle"></i> How it works:</h6>
+                            <ol class="mb-0 small">
+                                <li>You'll be added to the waiting list</li>
+                                <li>When a room becomes available, we'll notify you by email</li>
+                                <li>You'll have 24 hours to complete your booking</li>
+                                <li>If you don't book in time, the next person will be notified</li>
+                            </ol>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-warning">
+                                <i class="bi bi-hourglass"></i> Join Waiting List
+                            </button>
+                            <a asp-controller="Trip" asp-action="Details" asp-route-id="@Model.TripId"
+                               class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left"></i> Back to Trip
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

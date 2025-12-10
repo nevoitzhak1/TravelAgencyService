@@ -1,0 +1,70 @@
+﻿@model TravelAgencyService.Models.ViewModels.BookingConfirmationViewModel
+
+@{
+    ViewData["Title"] = "Booking Confirmed";
+}
+
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-body text-center py-5">
+                    <div class="mb-4">
+                        <i class="bi bi-check-circle text-success" style="font-size: 5rem;"></i>
+                    </div>
+                    <h2 class="text-success">Booking Confirmed!</h2>
+                    <p class="lead">Thank you for booking with Travel Agency</p>
+                    <p class="text-muted">Booking Reference: <strong>#@Model.BookingId</strong></p>
+                </div>
+
+                <div class="card-body border-top">
+                    <div class="row">
+                        <div class="col-md-4">
+                            @if (!string.IsNullOrEmpty(Model.MainImageUrl))
+                            {
+                                <img src="@Model.MainImageUrl" class="img-fluid rounded" alt="@Model.PackageName">
+                            }
+                        </div>
+                        <div class="col-md-8">
+                            <h4>@Model.PackageName</h4>
+                            <p class="mb-1">
+                                <i class="bi bi-geo-alt text-danger"></i> @Model.Destination, @Model.Country
+                            </p>
+                            <p class="mb-1">
+                                <i class="bi bi-calendar text-primary"></i>
+                                @Model.StartDate.ToString("MMMM dd, yyyy") - @Model.EndDate.ToString("MMMM dd, yyyy")
+                            </p>
+                            <p class="mb-1">
+                                <i class="bi bi-door-open"></i> @Model.NumberOfRooms room(s)
+                            </p>
+                            <p class="mb-0 fs-5">
+                                <strong>Total Paid: $@Model.TotalPrice</strong>
+                                <span class="badge bg-success ms-2">Paid</span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body border-top">
+                    <h5><i class="bi bi-envelope"></i> Confirmation Email Sent</h5>
+                    <p class="text-muted">A confirmation email has been sent to your registered email address with all the booking details.</p>
+
+                    <h5 class="mt-4"><i class="bi bi-download"></i> Download Your Itinerary</h5>
+                    <p class="text-muted">Your detailed trip itinerary is now available for download.</p>
+                    <a asp-action="DownloadItinerary" asp-route-id="@Model.BookingId" class="btn btn-outline-primary">
+                        <i class="bi bi-file-earmark-text"></i> Download Itinerary
+                    </a>
+                </div>
+
+                <div class="card-footer text-center">
+                    <a asp-action="MyBookings" class="btn btn-primary me-2">
+                        <i class="bi bi-calendar-check"></i> View My Bookings
+                    </a>
+                    <a asp-controller="Trip" asp-action="Index" class="btn btn-outline-secondary">
+                        <i class="bi bi-search"></i> Browse More Trips
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

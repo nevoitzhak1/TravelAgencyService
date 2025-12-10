@@ -28,27 +28,30 @@
 
                         <div class="mb-3">
                             <label asp-for="PackageName" class="form-label"></label>
-                            <input asp-for="PackageName" class="form-control" placeholder="e.g., Paris Romantic Getaway" />
+                            <input asp-for="PackageName" class="form-control" id="packageName"
+                                   placeholder="e.g., Paris Romantic Getaway" oninput="updatePreview()" />
                             <span asp-validation-for="PackageName" class="text-danger"></span>
                         </div>
 
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label asp-for="Destination" class="form-label"></label>
-                                <input asp-for="Destination" class="form-control" placeholder="e.g., Paris" />
+                                <input asp-for="Destination" class="form-control" id="destination"
+                                       placeholder="e.g., Paris" oninput="updatePreview()" />
                                 <span asp-validation-for="Destination" class="text-danger"></span>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label asp-for="Country" class="form-label"></label>
-                                <input asp-for="Country" class="form-control" placeholder="e.g., France" />
+                                <input asp-for="Country" class="form-control" id="country"
+                                       placeholder="e.g., France" oninput="updatePreview()" />
                                 <span asp-validation-for="Country" class="text-danger"></span>
                             </div>
                         </div>
 
                         <div class="mb-3">
                             <label asp-for="Description" class="form-label"></label>
-                            <textarea asp-for="Description" class="form-control" rows="4"
-                                      placeholder="Describe the trip experience..."></textarea>
+                            <textarea asp-for="Description" class="form-control" id="description" rows="4"
+                                      placeholder="Describe the trip experience..." oninput="updatePreview()"></textarea>
                             <span asp-validation-for="Description" class="text-danger"></span>
                         </div>
 
@@ -58,12 +61,14 @@
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label asp-for="StartDate" class="form-label"></label>
-                                <input asp-for="StartDate" class="form-control" type="date" />
+                                <input asp-for="StartDate" class="form-control" type="date" id="startDate"
+                                       onchange="updatePreview()" />
                                 <span asp-validation-for="StartDate" class="text-danger"></span>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label asp-for="EndDate" class="form-label"></label>
-                                <input asp-for="EndDate" class="form-control" type="date" />
+                                <input asp-for="EndDate" class="form-control" type="date" id="endDate"
+                                       onchange="updatePreview()" />
                                 <span asp-validation-for="EndDate" class="text-danger"></span>
                             </div>
                         </div>
@@ -73,13 +78,15 @@
                                 <label asp-for="Price" class="form-label"></label>
                                 <div class="input-group">
                                     <span class="input-group-text">$</span>
-                                    <input asp-for="Price" class="form-control" type="number" step="0.01" />
+                                    <input asp-for="Price" class="form-control" type="number" step="0.01"
+                                           id="price" oninput="updatePreview()" />
                                 </div>
                                 <span asp-validation-for="Price" class="text-danger"></span>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label asp-for="TotalRooms" class="form-label"></label>
-                                <input asp-for="TotalRooms" class="form-control" type="number" />
+                                <input asp-for="TotalRooms" class="form-control" type="number" id="totalRooms"
+                                       oninput="updatePreview()" />
                                 <span asp-validation-for="TotalRooms" class="text-danger"></span>
                             </div>
                         </div>
@@ -90,8 +97,9 @@
                         <div class="row">
                             <div class="col-md-4 mb-3">
                                 <label asp-for="PackageType" class="form-label"></label>
-                                <select asp-for="PackageType" class="form-select"
-                                        asp-items="Html.GetEnumSelectList<TravelAgencyService.Models.PackageType>()">
+                                <select asp-for="PackageType" class="form-select" id="packageType"
+                                        asp-items="Html.GetEnumSelectList<TravelAgencyService.Models.PackageType>()"
+                                        onchange="updatePreview()">
                                 </select>
                                 <span asp-validation-for="PackageType" class="text-danger"></span>
                             </div>
@@ -112,8 +120,8 @@
 
                         <div class="mb-3">
                             <label asp-for="MainImageUrl" class="form-label"></label>
-                            <input asp-for="MainImageUrl" class="form-control"
-                                   placeholder="https://example.com/image.jpg" />
+                            <input asp-for="MainImageUrl" class="form-control" id="mainImageUrl"
+                                   placeholder="https://example.com/image.jpg" oninput="updatePreview()" />
                             <span asp-validation-for="MainImageUrl" class="text-danger"></span>
                             <small class="text-muted">Enter a URL for the main trip image</small>
                         </div>
@@ -154,17 +162,81 @@
             </div>
         </div>
 
-        <!-- Preview Card -->
+        <!-- Live Preview Card -->
         <div class="col-md-4">
             <div class="card shadow sticky-top" style="top: 20px;">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-eye"></i> Preview</h5>
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="bi bi-eye"></i> Live Preview</h5>
                 </div>
-                <div class="card-body">
-                    <p class="text-muted">Fill in the form to see a preview of your trip card.</p>
-                    <div class="bg-light rounded p-3 text-center">
-                        <i class="bi bi-image fs-1 text-muted"></i>
-                        <p class="mt-2 mb-0 text-muted">Trip preview will appear here</p>
+                <div class="card-body p-0">
+                    <div class="card border-0">
+                        <!-- Preview Image -->
+                        <div id="previewImageContainer">
+                            <div class="bg-light d-flex align-items-center justify-content-center"
+                                 id="previewNoImage" style="height: 180px;">
+                                <div class="text-center text-muted">
+                                    <i class="bi bi-image fs-1"></i>
+                                    <p class="mb-0 small">Add image URL to preview</p>
+                                </div>
+                            </div>
+                            <img id="previewImage" src="" alt="Preview"
+                                 style="height: 180px; width: 100%; object-fit: cover; display: none;">
+                        </div>
+
+                        <!-- Preview Badge -->
+                        <span class="position-absolute bottom-0 start-0 badge bg-primary m-2" id="previewBadge"
+                              style="display: none;">
+                            Family
+                        </span>
+
+                        <div class="card-body">
+                            <h5 class="card-title" id="previewTitle">Package Name</h5>
+                            <p class="card-text text-muted mb-1" id="previewLocation">
+                                <i class="bi bi-geo-alt"></i> <span>Destination, Country</span>
+                            </p>
+                            <p class="card-text text-muted mb-2" id="previewDates">
+                                <i class="bi bi-calendar"></i> <span>Select dates</span>
+                            </p>
+
+                            <!-- Preview Rating (Static for preview) -->
+                            <div class="mb-2">
+                                <i class="bi bi-star text-warning"></i>
+                                <i class="bi bi-star text-warning"></i>
+                                <i class="bi bi-star text-warning"></i>
+                                <i class="bi bi-star text-warning"></i>
+                                <i class="bi bi-star text-warning"></i>
+                                <small class="text-muted">(New)</small>
+                            </div>
+
+                            <!-- Preview Price -->
+                            <div class="mb-2">
+                                <span class="fs-4 fw-bold text-primary" id="previewPrice">$0</span>
+                                <small class="text-muted">/ person</small>
+                            </div>
+
+                            <!-- Preview Availability -->
+                            <p class="mb-0" id="previewRooms">
+                                <span class="text-success">
+                                    <i class="bi bi-check-circle"></i> <span>10 rooms available</span>
+                                </span>
+                            </p>
+                        </div>
+
+                        <div class="card-footer bg-white">
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-outline-primary btn-sm" disabled>
+                                    <i class="bi bi-eye"></i> View Details
+                                </button>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-primary" disabled>
+                                        <i class="bi bi-calendar-plus"></i> Book
+                                    </button>
+                                    <button class="btn btn-success" disabled>
+                                        <i class="bi bi-cart-plus"></i> Buy Now
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -174,4 +246,85 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+
+    <script>
+        function updatePreview() {
+            // Package Name
+            var packageName = document.getElementById('packageName').value;
+            document.getElementById('previewTitle').textContent = packageName || 'Package Name';
+
+            // Location
+            var destination = document.getElementById('destination').value;
+            var country = document.getElementById('country').value;
+            var locationText = '';
+            if (destination && country) {
+                locationText = destination + ', ' + country;
+            } else if (destination) {
+                locationText = destination;
+            } else if (country) {
+                locationText = country;
+            } else {
+                locationText = 'Destination, Country';
+            }
+            document.getElementById('previewLocation').innerHTML = '<i class="bi bi-geo-alt"></i> ' + locationText;
+
+            // Dates
+            var startDate = document.getElementById('startDate').value;
+            var endDate = document.getElementById('endDate').value;
+            var datesText = 'Select dates';
+            if (startDate && endDate) {
+                var start = new Date(startDate);
+                var end = new Date(endDate);
+                var options = { month: 'short', day: 'numeric' };
+                var optionsYear = { month: 'short', day: 'numeric', year: 'numeric' };
+                var duration = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+                datesText = start.toLocaleDateString('en-US', options) + ' - ' + end.toLocaleDateString('en-US', optionsYear);
+                if (duration > 0) {
+                    datesText += ' <span class="text-primary">(' + duration + ' days)</span>';
+                }
+            }
+            document.getElementById('previewDates').innerHTML = '<i class="bi bi-calendar"></i> ' + datesText;
+
+            // Price
+            var price = document.getElementById('price').value;
+            document.getElementById('previewPrice').textContent = '$' + (price || '0');
+
+            // Rooms
+            var rooms = document.getElementById('totalRooms').value;
+            var roomsText = (rooms || '10') + ' rooms available';
+            document.getElementById('previewRooms').innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> ' + roomsText + '</span>';
+
+            // Package Type Badge
+            var packageType = document.getElementById('packageType');
+            var packageTypeText = packageType.options[packageType.selectedIndex].text;
+            var badge = document.getElementById('previewBadge');
+            badge.textContent = packageTypeText;
+            badge.style.display = 'inline-block';
+
+            // Image
+            var imageUrl = document.getElementById('mainImageUrl').value;
+            var previewImage = document.getElementById('previewImage');
+            var previewNoImage = document.getElementById('previewNoImage');
+
+            if (imageUrl) {
+                previewImage.src = imageUrl;
+                previewImage.style.display = 'block';
+                previewNoImage.style.display = 'none';
+
+                // Handle image load error
+                previewImage.onerror = function() {
+                    previewImage.style.display = 'none';
+                    previewNoImage.style.display = 'flex';
+                };
+            } else {
+                previewImage.style.display = 'none';
+                previewNoImage.style.display = 'flex';
+            }
+        }
+
+        // Initialize preview on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            updatePreview();
+        });
+    </script>
 }

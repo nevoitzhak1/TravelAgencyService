@@ -81,6 +81,22 @@ namespace TravelAgencyService.Controllers
 
             if (ModelState.IsValid)
             {
+                // First check if user exists and is active
+                var user = await _userManager.FindByEmailAsync(model.Email);
+
+                if (user == null)
+                {
+                    ModelState.AddModelError(string.Empty, "Invalid login attempt.");
+                    return View(model);
+                }
+
+                // Check if user is deactivated
+                if (!user.IsActive)
+                {
+                    ModelState.AddModelError(string.Empty, "Your account has been deactivated. Please contact support.");
+                    return View(model);
+                }
+
                 var result = await _signInManager.PasswordSignInAsync(
                     model.Email,
                     model.Password,

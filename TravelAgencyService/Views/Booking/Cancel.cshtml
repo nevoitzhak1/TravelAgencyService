@@ -1,0 +1,66 @@
+﻿@model TravelAgencyService.Models.ViewModels.CancelBookingViewModel
+
+@{
+    ViewData["Title"] = "Cancel Booking";
+}
+
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Cancel Booking</h4>
+                </div>
+                <div class="card-body">
+                    <p class="lead">Are you sure you want to cancel this booking?</p>
+
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h5>@Model.PackageName</h5>
+                            <p class="mb-1"><i class="bi bi-geo-alt"></i> @Model.Destination</p>
+                            <p class="mb-1">
+                                <i class="bi bi-calendar"></i>
+                                @Model.StartDate.ToString("MMM dd") - @Model.EndDate.ToString("MMM dd, yyyy")
+                            </p>
+                            <p class="mb-1"><i class="bi bi-door-open"></i> @Model.NumberOfRooms room(s)</p>
+                            <p class="mb-0">
+                                <strong>Total: $@Model.TotalPrice</strong>
+                                @if (Model.IsPaid)
+                                {
+                                    <span class="badge bg-success">Paid</span>
+                                }
+                            </p>
+                        </div>
+                    </div>
+
+                    @if (Model.IsPaid)
+                    {
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            Since you've already paid, a refund of <strong>$@Model.TotalPrice</strong> will be processed within 5-7 business days.
+                        </div>
+                    }
+
+                    <form asp-action="Cancel" method="post">
+                        <input type="hidden" asp-for="BookingId" />
+
+                        <div class="mb-3">
+                            <label asp-for="CancellationReason" class="form-label"></label>
+                            <textarea asp-for="CancellationReason" class="form-control" rows="3"
+                                      placeholder="Please let us know why you're cancelling (optional)"></textarea>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-danger">
+                                <i class="bi bi-x-circle"></i> Yes, Cancel Booking
+                            </button>
+                            <a asp-action="MyBookings" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left"></i> No, Keep Booking
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
