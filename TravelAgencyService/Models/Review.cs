@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using TravelAgencyService.Models.ViewModels;
 
 namespace TravelAgencyService.Models
 {
@@ -54,4 +55,9 @@ namespace TravelAgencyService.Models
         TripReview,      // Review for a specific trip
         WebsiteReview    // Review for the booking experience / website
     }
+    
+
+
+    
 }
+

@@ -126,6 +126,7 @@ namespace TravelAgencyService.Controllers
         }
 
         // POST: /Admin/CreateTrip
+        
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> CreateTrip(TripCreateViewModel model)
@@ -158,6 +159,30 @@ namespace TravelAgencyService.Controllers
                     CreatedAt = DateTime.Now,
                     UpdatedAt = DateTime.Now
                 };
+
+                
+                try
+                {
+                    using (var httpClient = new HttpClient())
+                    {
+                        httpClient.DefaultRequestHeaders.Add("User-Agent", "TravelAgencyApp/1.0");
+                        var query = Uri.EscapeDataString($"{model.Destination}, {model.Country}");
+                        var url = $"https://nominatim.openstreetmap.org/search?format=json&q={query}&limit=1";
+                        var response = await httpClient.GetStringAsync(url);
+                        var json = System.Text.Json.JsonDocument.Parse(response);
+
+                        if (json.RootElement.GetArrayLength() > 0)
+                        {
+                            var result = json.RootElement[0];
+                            trip.Latitude = result.GetProperty("lat").GetDouble();
+                            trip.Longitude = result.GetProperty("lon").GetDouble();
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Geocoding failed: {ex.Message}");
+                }
 
                 _context.Trips.Add(trip);
                 await _context.SaveChangesAsync();

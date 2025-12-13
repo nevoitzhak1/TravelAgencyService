@@ -8,6 +8,9 @@ namespace TravelAgencyService.Models.ViewModels
         public string PackageName { get; set; } = string.Empty;
         public string Destination { get; set; } = string.Empty;
         public string Country { get; set; } = string.Empty;
+
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
         public decimal Price { get; set; }
@@ -79,5 +82,37 @@ namespace TravelAgencyService.Models.ViewModels
         public string? Title { get; set; }
         public string Comment { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
+        public string TripName { get; set; } = string.Empty;
+    }
+
+    public class ReviewListViewModel
+    {
+        public List<ReviewViewModel> Reviews { get; set; } = new List<ReviewViewModel>();
+        public int TotalReviews { get; set; }
+        public int CurrentPage { get; set; }
+        public int PageSize { get; set; }
+        public int TotalPages { get; set; }
+
+        // Filters
+        public int? SelectedRating { get; set; }
+        public int? SelectedTripId { get; set; }
+        public string? SearchQuery { get; set; }
+
+        // For dropdowns
+        public List<TripSelectionViewModel> AvailableTrips { get; set; } = new List<TripSelectionViewModel>();
+
+        // Statistics
+        public double AverageRating { get; set; }
+        public int FiveStarCount { get; set; }
+        public int FourStarCount { get; set; }
+        public int ThreeStarCount { get; set; }
+        public int TwoStarCount { get; set; }
+        public int OneStarCount { get; set; }
+    }
+
+    public class TripSelectionViewModel
+    {
+        public int TripId { get; set; }
+        public string PackageName { get; set; } = string.Empty;
     }
 }

@@ -18,16 +18,19 @@ namespace TravelAgencyService.Controllers
 
         // GET: /Account/Register
         [HttpGet]
-        public IActionResult Register()
+        public IActionResult Register(string? returnUrl = null)
         {
+            ViewData["ReturnUrl"] = returnUrl;
             return View();
         }
 
         // POST: /Account/Register
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Register(RegisterViewModel model)
+        public async Task<IActionResult> Register(RegisterViewModel model, string? returnUrl = null)
         {
+            ViewData["ReturnUrl"] = returnUrl;
+
             if (ModelState.IsValid)
             {
                 var user = new ApplicationUser
@@ -52,6 +55,11 @@ namespace TravelAgencyService.Controllers
                     // Sign in the user
                     await _signInManager.SignInAsync(user, isPersistent: false);
 
+                    // Redirect to returnUrl if provided, otherwise to Home
+                    if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+                    {
+                        return Redirect(returnUrl);
+                    }
                     return RedirectToAction("Index", "Home");
                 }
 
