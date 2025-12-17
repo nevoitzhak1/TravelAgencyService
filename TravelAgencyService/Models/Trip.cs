@@ -13,6 +13,9 @@ namespace TravelAgencyService.Models
         [Display(Name = "Package Name")]
         public string PackageName { get; set; } = string.Empty;
 
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
+
         [Required(ErrorMessage = "Destination is required")]
         [StringLength(100)]
         public string Destination { get; set; } = string.Empty;

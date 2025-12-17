@@ -42,9 +42,16 @@
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label asp-for="Country" class="form-label"></label>
-                                <input asp-for="Country" class="form-control" id="country"
-                                       placeholder="e.g., France" oninput="updatePreview()" />
+                                <input asp-for="Country"
+                                       class="form-control"
+                                       id="country"
+                                       list="countriesList"
+                                       autocomplete="off"
+                                       placeholder="Start typing country name..."
+                                       oninput="updatePreview()" />
+                                <datalist id="countriesList"></datalist>
                                 <span asp-validation-for="Country" class="text-danger"></span>
+                                <small class="text-muted">Type to see suggestions from all countries</small>
                             </div>
                         </div>
 
@@ -247,6 +254,29 @@
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
 
+    <!-- Load Countries API for AutoComplete -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load all countries from REST Countries API
+            fetch('https://restcountries.com/v3.1/all')
+                .then(response => response.json())
+                .then(countries => {
+                    const datalist = document.getElementById('countriesList');
+
+                    // Sort alphabetically
+                    countries
+                        .sort((a, b) => a.name.common.localeCompare(b.name.common))
+                        .forEach(country => {
+                            const option = document.createElement('option');
+                            option.value = country.name.common;
+                            datalist.appendChild(option);
+                        });
+
+                    console.log('✅ Loaded', countries.length, 'countries for autocomplete');
+                })
+                .catch(error => console.error('Failed to load countries:', error));
+        });
+    </script>
     <script>
         function updatePreview() {
             // Package Name

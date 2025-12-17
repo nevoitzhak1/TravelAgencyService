@@ -239,34 +239,61 @@
                                         }
                                     </p>
                                 </div>
-
-                                <div class="card-footer bg-white">
-                                    <div class="d-grid gap-2">
-                                        <a asp-action="Details" asp-route-id="@trip.TripId" class="btn btn-outline-primary">
-                                            <i class="bi bi-eye"></i> View Details
-                                        </a>
-                                        @if (!trip.IsFullyBooked)
-                                        {
-                                            <div class="btn-group">
-                                                <a asp-controller="Booking" asp-action="Book" asp-route-id="@trip.TripId"
-                                                   class="btn btn-primary">
-                                                    <i class="bi bi-calendar-plus"></i> Book
-                                                </a>
-                                                <a asp-controller="Cart" asp-action="Add" asp-route-id="@trip.TripId"
-                                                   class="btn btn-success">
-                                                    <i class="bi bi-cart-plus"></i> Buy Now
-                                                </a>
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            <a asp-controller="WaitingList" asp-action="Join" asp-route-id="@trip.TripId"
-                                               class="btn btn-secondary">
-                                                <i class="bi bi-hourglass"></i> Join Waiting List
-                                            </a>
-                                        }
-                                    </div>
-                                </div>
+<div class="card-footer bg-white">
+    <div class="d-grid gap-2">
+        <a asp-action="Details" asp-route-id="@trip.TripId" class="btn btn-outline-primary">
+            <i class="bi bi-eye"></i> View Details
+        </a>
+        
+        @if (!trip.IsFullyBooked)
+        {
+            <div class="btn-group">
+                @if (User.Identity?.IsAuthenticated == true)
+                {
+                    <a asp-controller="Booking" asp-action="Book" asp-route-id="@trip.TripId"
+                       class="btn btn-primary">
+                        <i class="bi bi-calendar-plus"></i> Book
+                    </a>
+                    <a asp-controller="Cart" asp-action="Add" asp-route-id="@trip.TripId"
+                       class="btn btn-success">
+                        <i class="bi bi-cart-plus"></i> Buy Now
+                    </a>
+                }
+                else
+                {
+                    <a asp-controller="Account" asp-action="Login" 
+                       asp-route-returnUrl="@Url.Action("Book", "Booking", new { id = trip.TripId })"
+                       class="btn btn-primary">
+                        <i class="bi bi-calendar-plus"></i> Book
+                    </a>
+                    <a asp-controller="Account" asp-action="Login" 
+                       asp-route-returnUrl="@Url.Action("Add", "Cart", new { id = trip.TripId })"
+                       class="btn btn-success">
+                        <i class="bi bi-cart-plus"></i> Buy Now
+                    </a>
+                }
+            </div>
+        }
+        else
+        {
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <a asp-controller="WaitingList" asp-action="Join" asp-route-id="@trip.TripId"
+                   class="btn btn-secondary">
+                    <i class="bi bi-hourglass"></i> Join Waiting List
+                </a>
+            }
+            else
+            {
+                <a asp-controller="Account" asp-action="Login" 
+                   asp-route-returnUrl="@Url.Action("Join", "WaitingList", new { id = trip.TripId })"
+                   class="btn btn-secondary">
+                    <i class="bi bi-hourglass"></i> Join Waiting List
+                </a>
+            }
+        }
+    </div>
+</div>
                             </div>
                         </div>
                     }

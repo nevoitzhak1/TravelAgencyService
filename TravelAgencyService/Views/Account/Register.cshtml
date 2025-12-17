@@ -1,5 +1,4 @@
 ﻿@model TravelAgencyService.Models.ViewModels.RegisterViewModel
-
 @{
     ViewData["Title"] = "Register";
 }
@@ -13,6 +12,7 @@
             <div class="card-body">
                 <form asp-action="Register" method="post">
                     <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+                    <input type="hidden" name="returnUrl" value="@ViewData["ReturnUrl"]" />
 
                     <div class="row">
                         <div class="col-md-6 mb-3">
@@ -47,13 +47,23 @@
 
                     <div class="mb-3">
                         <label asp-for="Password" class="form-label"></label>
-                        <input asp-for="Password" class="form-control" />
+                        <div class="input-group">
+                            <input asp-for="Password" class="form-control" id="registerPassword" />
+                            <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('registerPassword', this)">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
                         <span asp-validation-for="Password" class="text-danger"></span>
                     </div>
 
                     <div class="mb-3">
                         <label asp-for="ConfirmPassword" class="form-label"></label>
-                        <input asp-for="ConfirmPassword" class="form-control" />
+                        <div class="input-group">
+                            <input asp-for="ConfirmPassword" class="form-control" id="confirmPassword" />
+                            <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('confirmPassword', this)">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
                         <span asp-validation-for="ConfirmPassword" class="text-danger"></span>
                     </div>
 
@@ -61,15 +71,31 @@
                         <button type="submit" class="btn btn-primary">Register</button>
                     </div>
                 </form>
-
                 <hr />
                 <p class="text-center mb-0">
-                    Already have an account? <a asp-action="Login">Login here</a>
+                    Already have an account? <a asp-action="Login" asp-route-returnUrl="@ViewData["ReturnUrl"]">Login here</a>
                 </p>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+    function togglePassword(inputId, button) {
+        const passwordInput = document.getElementById(inputId);
+        const icon = button.querySelector('i');
+
+        if (passwordInput.type === 'password') {
+            passwordInput.type = 'text';
+            icon.classList.remove('bi-eye');
+            icon.classList.add('bi-eye-slash');
+        } else {
+            passwordInput.type = 'password';
+            icon.classList.remove('bi-eye-slash');
+            icon.classList.add('bi-eye');
+        }
+    }
+</script>
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
