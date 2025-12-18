@@ -245,16 +245,21 @@
                             {
                                 @if (!Model.IsInWaitingList)
                                 {
-                                    <a asp-controller="WaitingList" asp-action="Join" asp-route-id="@Model.Trip.TripId"
-                                       class="btn btn-warning btn-lg">
-                                        <i class="bi bi-hourglass"></i> Join Waiting List
-                                    </a>
+                                    <!-- ✅ תוקן: Form במקום Link -->
+                                    <form asp-controller="WaitingList" asp-action="Join" method="post">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="tripId" value="@Model.Trip.TripId" />
+                                        <button type="submit" class="btn btn-warning btn-lg w-100">
+                                            <i class="bi bi-hourglass"></i> Join Waiting List
+                                        </button>
+                                    </form>
                                 }
                                 else
                                 {
-                                    <button class="btn btn-secondary btn-lg" disabled>
-                                        <i class="bi bi-check-circle"></i> On Waiting List (#@Model.WaitingListPosition)
-                                    </button>
+                                    <a asp-controller="WaitingList" asp-action="Status" asp-route-tripId="@Model.Trip.TripId"
+                                       class="btn btn-info btn-lg">
+                                        <i class="bi bi-eye"></i> View Status (#@Model.WaitingListPosition)
+                                    </a>
                                 }
                             }
                         }

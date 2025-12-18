@@ -83,8 +83,9 @@
                     </div>
                     <div class="col-md-4 mb-3">
                         <label asp-for="AvailableRooms" class="form-label"></label>
-                        <input asp-for="AvailableRooms" class="form-control" type="number" readonly />
-                        <small class="text-muted">Auto-calculated based on bookings</small>
+                        <input asp-for="AvailableRooms" class="form-control" type="number" min="0" />
+                        <span asp-validation-for="AvailableRooms" class="text-danger"></span>
+                        <small class="text-muted">Current available rooms for booking</small>
                     </div>
                 </div>
 
