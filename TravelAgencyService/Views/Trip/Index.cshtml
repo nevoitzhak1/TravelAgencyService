@@ -248,29 +248,29 @@
                                         
                                         @if (!trip.IsFullyBooked)
                                         {
-                                            <div class="btn-group">
+                                            <div class="btn-group w-100">
                                                 @if (User.Identity?.IsAuthenticated == true)
                                                 {
-                                                    <a asp-controller="Booking" asp-action="Book" asp-route-id="@trip.TripId"
-                                                       class="btn btn-primary">
-                                                        <i class="bi bi-calendar-plus"></i> Book
+                                                    <a asp-controller="Cart" asp-action="BuyNow" asp-route-id="@trip.TripId"
+                                                       class="btn btn-success">
+                                                        <i class="bi bi-lightning"></i> Buy Now
                                                     </a>
                                                     <a asp-controller="Cart" asp-action="Add" asp-route-id="@trip.TripId"
-                                                       class="btn btn-success">
-                                                        <i class="bi bi-cart-plus"></i> Buy Now
+                                                       class="btn btn-primary">
+                                                        <i class="bi bi-cart-plus"></i> Add to Cart
                                                     </a>
                                                 }
                                                 else
                                                 {
                                                     <a asp-controller="Account" asp-action="Login" 
-                                                       asp-route-returnUrl="@Url.Action("Book", "Booking", new { id = trip.TripId })"
-                                                       class="btn btn-primary">
-                                                        <i class="bi bi-calendar-plus"></i> Book
+                                                       asp-route-returnUrl="@Url.Action("BuyNow", "Cart", new { id = trip.TripId })"
+                                                       class="btn btn-success">
+                                                        <i class="bi bi-lightning"></i> Buy Now
                                                     </a>
                                                     <a asp-controller="Account" asp-action="Login" 
                                                        asp-route-returnUrl="@Url.Action("Add", "Cart", new { id = trip.TripId })"
-                                                       class="btn btn-success">
-                                                        <i class="bi bi-cart-plus"></i> Buy Now
+                                                       class="btn btn-primary">
+                                                        <i class="bi bi-cart-plus"></i> Add to Cart
                                                     </a>
                                                 }
                                             </div>
@@ -279,7 +279,6 @@
                                         {
                                             @if (User.Identity?.IsAuthenticated == true)
                                             {
-                                                <!-- ✅ תוקן: Form במקום Link -->
                                                 <form asp-controller="WaitingList" asp-action="Join" method="post">
                                                     @Html.AntiForgeryToken()
                                                     <input type="hidden" name="tripId" value="@trip.TripId" />
@@ -291,8 +290,8 @@
                                             else
                                             {
                                                 <a asp-controller="Account" asp-action="Login" 
-                                                   asp-route-returnUrl="@Url.Action("Status", "WaitingList", new { tripId = trip.TripId })"
-                                                   class="btn btn-secondary">
+                                                   asp-route-returnUrl="@Url.Action("Details", "Trip", new { id = trip.TripId })"
+                                                   class="btn btn-secondary w-100">
                                                     <i class="bi bi-hourglass"></i> Join Waiting List
                                                 </a>
                                             }

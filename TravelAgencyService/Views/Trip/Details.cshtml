@@ -223,12 +223,16 @@
                                     }
                                     else
                                     {
+                                        <a asp-controller="Cart" asp-action="BuyNow" asp-route-id="@Model.Trip.TripId"
+                                           class="btn btn-success btn-lg">
+                                            <i class="bi bi-lightning"></i> Buy Now
+                                        </a>
                                         <a asp-controller="Booking" asp-action="Book" asp-route-id="@Model.Trip.TripId"
                                            class="btn btn-primary btn-lg">
                                             <i class="bi bi-calendar-plus"></i> Book Now
                                         </a>
                                         <a asp-controller="Cart" asp-action="Add" asp-route-id="@Model.Trip.TripId"
-                                           class="btn btn-success btn-lg">
+                                           class="btn btn-outline-primary btn-lg">
                                             <i class="bi bi-cart-plus"></i> Add to Cart
                                         </a>
                                     }
@@ -245,7 +249,6 @@
                             {
                                 @if (!Model.IsInWaitingList)
                                 {
-                                    <!-- ✅ תוקן: Form במקום Link -->
                                     <form asp-controller="WaitingList" asp-action="Join" method="post">
                                         @Html.AntiForgeryToken()
                                         <input type="hidden" name="tripId" value="@Model.Trip.TripId" />
