@@ -28,6 +28,7 @@ builder.Services.AddDefaultIdentity<ApplicationUser>(options =>
     .AddEntityFrameworkStores<ApplicationDbContext>();
 
 builder.Services.AddControllersWithViews();
+builder.Services.AddScoped<TravelAgencyService.Services.PdfService>();
 builder.Services.AddRazorPages();
 
 var app = builder.Build();
