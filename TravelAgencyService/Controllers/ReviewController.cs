@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using TravelAgencyService.Data;
 using TravelAgencyService.Models;
 using TravelAgencyService.Models.ViewModels;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace TravelAgencyService.Controllers
 {
@@ -99,6 +101,148 @@ namespace TravelAgencyService.Controllers
             };
 
             return View(viewModel);
+        }
+
+        // GET: /Review/Create?tripId=5 (Trip Review) or /Review/Create (Service Review)
+        [Authorize]
+        public async Task<IActionResult> Create(int? tripId)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            // If tripId provided - it's a Trip Review
+            if (tripId.HasValue)
+            {
+                // Check if user booked this trip
+                var hasBooked = await _context.Bookings
+                    .AnyAsync(b => b.UserId == userId &&
+                                  b.TripId == tripId &&
+                                  b.Status == BookingStatus.Confirmed);
+
+                if (!hasBooked)
+                {
+                    TempData["Error"] = "You can only review trips you have booked.";
+                    return RedirectToAction("Details", "Trip", new { id = tripId });
+                }
+
+                // Check if already reviewed
+                var alreadyReviewed = await _context.Reviews
+                    .AnyAsync(r => r.UserId == userId && r.TripId == tripId);
+
+                if (alreadyReviewed)
+                {
+                    TempData["Error"] = "You have already reviewed this trip.";
+                    return RedirectToAction("Details", "Trip", new { id = tripId });
+                }
+
+                var trip = await _context.Trips.FindAsync(tripId);
+                if (trip == null) return NotFound();
+
+                return View(new CreateReviewViewModel
+                {
+                    TripId = tripId,
+                    TripName = trip.PackageName,
+                    ReviewType = ReviewType.TripReview
+                });
+            }
+
+            // No tripId - it's a Website/Service Review
+            // Check if user already left a service review
+            var hasServiceReview = await _context.Reviews
+                .AnyAsync(r => r.UserId == userId && r.ReviewType == ReviewType.WebsiteReview);
+
+            if (hasServiceReview)
+            {
+                TempData["Error"] = "You have already submitted a service review.";
+                return RedirectToAction("Index", "Home");
+            }
+
+            return View(new CreateReviewViewModel
+            {
+                ReviewType = ReviewType.WebsiteReview
+            });
+        }
+
+        // POST: /Review/Create
+        [HttpPost]
+        [Authorize]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Create(CreateReviewViewModel model)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            // Validate Trip Review
+            if (model.ReviewType == ReviewType.TripReview && model.TripId.HasValue)
+            {
+                var hasBooked = await _context.Bookings
+                    .AnyAsync(b => b.UserId == userId &&
+                                  b.TripId == model.TripId &&
+                                  b.Status == BookingStatus.Confirmed);
+
+                if (!hasBooked)
+                {
+                    TempData["Error"] = "You can only review trips you have booked.";
+                    return RedirectToAction("Details", "Trip", new { id = model.TripId });
+                }
+
+                var alreadyReviewed = await _context.Reviews
+                    .AnyAsync(r => r.UserId == userId && r.TripId == model.TripId);
+
+                if (alreadyReviewed)
+                {
+                    TempData["Error"] = "You have already reviewed this trip.";
+                    return RedirectToAction("Details", "Trip", new { id = model.TripId });
+                }
+            }
+
+            // Validate Service Review
+            if (model.ReviewType == ReviewType.WebsiteReview)
+            {
+                var hasServiceReview = await _context.Reviews
+                    .AnyAsync(r => r.UserId == userId && r.ReviewType == ReviewType.WebsiteReview);
+
+                if (hasServiceReview)
+                {
+                    TempData["Error"] = "You have already submitted a service review.";
+                    return RedirectToAction("Index", "Home");
+                }
+            }
+
+            if (ModelState.IsValid)
+            {
+                var review = new Review
+                {
+                    UserId = userId!,
+                    TripId = model.TripId,
+                    Rating = model.Rating,
+                    Title = model.Title,
+                    Comment = model.Comment,
+                    ReviewType = model.ReviewType,
+                    IsApproved = true,
+                    CreatedAt = DateTime.Now,
+                    UpdatedAt = DateTime.Now
+                };
+
+                _context.Reviews.Add(review);
+                await _context.SaveChangesAsync();
+
+                TempData["Success"] = "Thank you for your review!";
+
+                if (model.TripId.HasValue)
+                {
+                    return RedirectToAction("Details", "Trip", new { id = model.TripId });
+                }
+
+                return RedirectToAction("Index", "Home");
+            }
+
+            // If validation failed, reload trip name if needed
+            if (model.TripId.HasValue)
+            {
+                var trip = await _context.Trips.FindAsync(model.TripId);
+                model.TripName = trip?.PackageName;
+            }
+
+            return View(model);
         }
     }
 }

@@ -471,7 +471,67 @@
         </div>
     </section>
 }
+<!-- What Users Think About Our Service -->
+@if (Model.ServiceReviews.Any())
+{
+    <section class="py-5 bg-white">
+        <div class="container">
+            <div class="text-center mb-5">
+                <span class="badge px-4 py-2 mb-3" style="background: linear-gradient(45deg, #28a745, #20c997); font-size: 0.9rem; border-radius: 50px;">
+                    <i class="bi bi-hand-thumbs-up-fill"></i> Service Feedback
+                </span>
+                <h2 class="display-5 fw-bold mb-3" style="color: #2d3748;">
+                    What Users Think About Our Service
+                </h2>
+                <p class="lead text-muted">Feedback about our booking experience</p>
+            </div>
 
+            <div class="row g-4">
+                @foreach (var review in Model.ServiceReviews)
+                {
+                    <div class="col-md-4">
+                        <div class="card border-0 shadow-lg h-100" style="border-radius: 20px;">
+                            <div class="card-body p-4">
+                                <div class="mb-3">
+                                    @for (int i = 1; i <= 5; i++)
+                                    {
+                                        <i class="bi bi-star@(i <= review.Rating ? "-fill" : "") text-warning fs-5"></i>
+                                    }
+                                </div>
+
+                                @if (!string.IsNullOrEmpty(review.Title))
+                                {
+                                    <h5 class="fw-bold mb-3">"@review.Title"</h5>
+                                }
+
+                                <p class="text-muted mb-4">@review.Comment</p>
+
+                                <div class="d-flex align-items-center border-top pt-3">
+                                    <div class="avatar me-3" style="width: 50px; height: 50px; border-radius: 50%; background: linear-gradient(45deg, #28a745, #20c997); display: flex; align-items: center; justify-content: center; color: white; font-size: 1.5rem; font-weight: bold;">
+                                        @review.UserName.Substring(0, 1).ToUpper()
+                                    </div>
+                                    <div>
+                                        <div class="fw-bold">@review.UserName</div>
+                                        <small class="text-muted">@review.CreatedAt.ToString("MMMM dd, yyyy")</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <div class="text-center mt-4">
+                    <a asp-controller="Review" asp-action="Create" class="btn btn-success btn-lg px-5 py-3" style="border-radius: 50px;">
+                        <i class="bi bi-pencil-square"></i> Share Your Experience
+                    </a>
+                </div>
+            }
+        </div>
+    </section>
+}
 <!-- CTA -->
 <section class="py-5 position-relative overflow-hidden" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 400px;">
     <div class="position-absolute w-100 h-100" style="background: url('https://images.unsplash.com/photo-1436491865332-7a61a109cc05?q=80&w=2674') center/cover; opacity: 0.2;"></div>

@@ -1,0 +1,158 @@
+﻿@model CreateReviewViewModel
+
+@{
+    ViewData["Title"] = Model.ReviewType == TravelAgencyService.Models.ReviewType.TripReview
+        ? $"Review: {Model.TripName}"
+        : "Rate Our Service";
+}
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-lg border-0" style="border-radius: 20px;">
+                <div class="card-header text-white text-center py-4"
+                     style="border-radius: 20px 20px 0 0; background: linear-gradient(45deg, @(Model.ReviewType == TravelAgencyService.Models.ReviewType.TripReview ? "#667eea, #764ba2" : "#28a745, #20c997"));">
+                    @if (Model.ReviewType == TravelAgencyService.Models.ReviewType.TripReview)
+                    {
+                        <i class="bi bi-airplane fs-1 mb-2 d-block"></i>
+                        <h3 class="mb-1">Review Your Trip</h3>
+                        <p class="mb-0 opacity-75">@Model.TripName</p>
+                    }
+                    else
+                    {
+                        <i class="bi bi-hand-thumbs-up fs-1 mb-2 d-block"></i>
+                        <h3 class="mb-1">Rate Our Service</h3>
+                        <p class="mb-0 opacity-75">Tell us about your booking experience</p>
+                    }
+                </div>
+
+                <div class="card-body p-4 p-md-5">
+                    @if (TempData["Error"] != null)
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show">
+                            @TempData["Error"]
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    }
+
+                    <form asp-action="Create" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" asp-for="TripId" />
+                        <input type="hidden" asp-for="TripName" />
+                        <input type="hidden" asp-for="ReviewType" />
+
+                        <!-- Star Rating -->
+                        <div class="mb-4 text-center">
+                            <label class="form-label fw-bold fs-5 d-block mb-3">How would you rate your experience?</label>
+                            <div class="star-rating d-inline-flex gap-2" id="starRating">
+                                @for (int i = 1; i <= 5; i++)
+                                {
+                                    <i class="bi bi-star fs-1 star-icon" data-rating="@i" style="cursor: pointer; color: #ddd; transition: all 0.2s;"></i>
+                                }
+                            </div>
+                            <input type="hidden" asp-for="Rating" id="ratingInput" />
+                            <span asp-validation-for="Rating" class="text-danger d-block mt-2"></span>
+                        </div>
+
+                        <!-- Review Title -->
+                        <div class="mb-4">
+                            <label asp-for="Title" class="form-label fw-bold">
+                                <i class="bi bi-pencil me-1"></i> Review Title (Optional)
+                            </label>
+                            <input asp-for="Title" class="form-control form-control-lg"
+                                   placeholder="Summarize your experience in a few words..."
+                                   style="border-radius: 12px;" />
+                            <span asp-validation-for="Title" class="text-danger"></span>
+                        </div>
+
+                        <!-- Review Comment -->
+                        <div class="mb-4">
+                            <label asp-for="Comment" class="form-label fw-bold">
+                                <i class="bi bi-chat-text me-1"></i> Your Review
+                            </label>
+                            <textarea asp-for="Comment" class="form-control" rows="5"
+                                      placeholder="@(Model.ReviewType == TravelAgencyService.Models.ReviewType.TripReview
+                                                                                ? "Tell us about your trip experience, what you enjoyed, and any tips for future travelers..."
+                                                                                : "Tell us about your booking experience, website usability, customer service...")"
+                                      style="border-radius: 12px;"></textarea>
+                            <span asp-validation-for="Comment" class="text-danger"></span>
+                            <small class="text-muted">Minimum 10 characters</small>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-lg text-white py-3"
+                                    style="border-radius: 12px; background: linear-gradient(45deg, @(Model.ReviewType == TravelAgencyService.Models.ReviewType.TripReview ? "#667eea, #764ba2" : "#28a745, #20c997"));">
+                                <i class="bi bi-send-fill me-2"></i> Submit Review
+                            </button>
+
+                            @if (Model.TripId.HasValue)
+                            {
+                                <a asp-controller="Trip" asp-action="Details" asp-route-id="@Model.TripId"
+                                   class="btn btn-outline-secondary btn-lg py-3" style="border-radius: 12px;">
+                                    <i class="bi bi-arrow-left me-2"></i> Back to Trip
+                                </a>
+                            }
+                            else
+                            {
+                                <a asp-controller="Home" asp-action="Index"
+                                   class="btn btn-outline-secondary btn-lg py-3" style="border-radius: 12px;">
+                                    <i class="bi bi-arrow-left me-2"></i> Back to Home
+                                </a>
+                            }
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const stars = document.querySelectorAll('.star-icon');
+            const ratingInput = document.getElementById('ratingInput');
+            let currentRating = 0;
+
+            stars.forEach(star => {
+                // Hover effect
+                star.addEventListener('mouseenter', function() {
+                    const rating = this.dataset.rating;
+                    highlightStars(rating);
+                });
+
+                // Click to select
+                star.addEventListener('click', function() {
+                    currentRating = this.dataset.rating;
+                    ratingInput.value = currentRating;
+                    highlightStars(currentRating);
+                });
+            });
+
+            // Reset on mouse leave
+            document.getElementById('starRating').addEventListener('mouseleave', function() {
+                highlightStars(currentRating);
+            });
+
+            function highlightStars(rating) {
+                stars.forEach(star => {
+                    const starRating = star.dataset.rating;
+                    if (starRating <= rating) {
+                        star.classList.remove('bi-star');
+                        star.classList.add('bi-star-fill');
+                        star.style.color = '#ffc107';
+                        star.style.transform = 'scale(1.1)';
+                    } else {
+                        star.classList.remove('bi-star-fill');
+                        star.classList.add('bi-star');
+                        star.style.color = '#ddd';
+                        star.style.transform = 'scale(1)';
+                    }
+                });
+            }
+        });
+    </script>
+}
