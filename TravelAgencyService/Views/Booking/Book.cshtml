@@ -165,10 +165,10 @@
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
     <script>
-        var pricePerPerson = @Model.PricePerPerson;
+        var pricePerPerson = @Json.Serialize(Model.PricePerPerson);
 
         function updateTotal() {
-            var rooms = document.getElementById('roomSelect').value;
+            var rooms = parseInt(document.getElementById('roomSelect').value, 10) || 0;
             var total = pricePerPerson * rooms;
             document.getElementById('roomCount').textContent = rooms;
             document.getElementById('totalPrice').textContent = '$' + total.toFixed(2);
