@@ -276,8 +276,11 @@ namespace TravelAgencyService.Controllers
                     _context.CartItems.RemoveRange(cartItemsToRemove);
                     await _context.SaveChangesAsync();
 
-                    TempData["Success"] = $"Payment successful! {bookingIds.Count} booking(s) confirmed.";
-                    return RedirectToAction("MyBookings", "Booking");
+                    TempData["Success"] = $"✅ Payment successful! {bookingIds.Count} booking(s) confirmed. You can view them in your email and under My Bookings.";
+                    TempData["ConfirmedBookingIds"] = string.Join(",", bookingIds);
+                    TempData["ConfirmedBookingsCount"] = bookingIds.Count;
+                    return RedirectToAction("Confirmation", "Booking");
+
                 }
                 catch
                 {

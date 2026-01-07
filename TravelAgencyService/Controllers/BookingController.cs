@@ -266,37 +266,63 @@ namespace TravelAgencyService.Controllers
             return View(model);
         }
 
-        // GET: /Booking/Confirmation/5
-        public async Task<IActionResult> Confirmation(int id)
+        // GET: /Booking/Confirmation  (cart)
+        // GET: /Booking/Confirmation/5 (single booking)
+        public async Task<IActionResult> Confirmation(int? id)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            var booking = await _context.Bookings
-                .Include(b => b.Trip)
-                .FirstOrDefaultAsync(b => b.BookingId == id && b.UserId == userId);
+            // ✅ נשמור את ההודעות גם אחרי שה-View יקרא אותן, כדי שגם בדף הבית הן יופיעו אחרי ה-redirect
+            TempData.Keep("Success");
+            TempData.Keep("Error");
+            TempData.Keep("Info");
+            TempData.Keep("ConfirmedBookingIds");
+            TempData.Keep("ConfirmedBookingsCount");
 
-            if (booking == null)
+            // מצב 1: הזמנה בודדת
+            if (id.HasValue)
             {
-                return NotFound();
+                var booking = await _context.Bookings
+                    .Include(b => b.Trip)
+                    .FirstOrDefaultAsync(b => b.BookingId == id.Value && b.UserId == userId);
+
+                if (booking == null)
+                    return NotFound();
+
+                var viewModel = new BookingConfirmationViewModel
+                {
+                    BookingId = booking.BookingId,
+                    PackageName = booking.Trip?.PackageName ?? "",
+                    Destination = booking.Trip?.Destination ?? "",
+                    Country = booking.Trip?.Country ?? "",
+                    StartDate = booking.Trip?.StartDate ?? DateTime.MinValue,
+                    EndDate = booking.Trip?.EndDate ?? DateTime.MinValue,
+                    NumberOfRooms = booking.NumberOfRooms,
+                    TotalPrice = booking.TotalPrice,
+                    BookingDate = booking.BookingDate,
+                    IsPaid = booking.IsPaid,
+                    MainImageUrl = booking.Trip?.MainImageUrl
+                };
+
+                ViewBag.IsCartConfirmation = false;
+                return View(viewModel);
             }
 
-            var viewModel = new BookingConfirmationViewModel
-            {
-                BookingId = booking.BookingId,
-                PackageName = booking.Trip?.PackageName ?? "",
-                Destination = booking.Trip?.Destination ?? "",
-                Country = booking.Trip?.Country ?? "",
-                StartDate = booking.Trip?.StartDate ?? DateTime.MinValue,
-                EndDate = booking.Trip?.EndDate ?? DateTime.MinValue,
-                NumberOfRooms = booking.NumberOfRooms,
-                TotalPrice = booking.TotalPrice,
-                BookingDate = booking.BookingDate,
-                IsPaid = booking.IsPaid,
-                MainImageUrl = booking.Trip?.MainImageUrl
-            };
+            var idsCsv = TempData.Peek("ConfirmedBookingIds") as string;
+            var countObj = TempData.Peek("ConfirmedBookingsCount");
 
-            return View(viewModel);
+            // אם הגיע בלי data - נחזיר לבית
+            if (string.IsNullOrWhiteSpace(idsCsv) && countObj == null)
+                return RedirectToAction("Index", "Home");
+
+            ViewBag.IsCartConfirmation = true;
+            ViewBag.ConfirmedBookingsCount = countObj ?? idsCsv?.Split(',', StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+
+            // אין לנו BookingConfirmationViewModel אחד להחזיר כאן (כי זה כמה הזמנות)
+            // אז נחזיר View עם model=null ונציג הודעה כללית
+            return View(model: null);
         }
+
 
         // GET: /Booking/Cancel/5
         public async Task<IActionResult> Cancel(int id)
