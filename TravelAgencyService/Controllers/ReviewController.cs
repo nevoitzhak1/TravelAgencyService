@@ -68,6 +68,12 @@ namespace TravelAgencyService.Controllers
             });
         }
 
+        // GET: /Review/ReviewSuccess
+        public IActionResult ReviewSuccess()
+        {
+            return View();
+        }
+
         // POST: /Review/Create
         [HttpPost]
         [Authorize]
@@ -120,14 +126,8 @@ namespace TravelAgencyService.Controllers
                 _context.Reviews.Add(review);
                 await _context.SaveChangesAsync();
 
-                TempData["Success"] = "Thank you for your review!";
-
-                if (model.TripId.HasValue)
-                {
-                    return RedirectToAction("Details", "Trip", new { id = model.TripId });
-                }
-
-                return RedirectToAction("Index", "Home");
+                // הפניה לדף תודה שחוזר לדף הבית אחרי 2 שניות
+                return RedirectToAction("ReviewSuccess");
             }
 
             if (model.TripId.HasValue)
@@ -136,7 +136,7 @@ namespace TravelAgencyService.Controllers
                 model.TripName = trip?.PackageName;
             }
 
-            return View(model);
+            return View("Create", model);
         }
     }
 }

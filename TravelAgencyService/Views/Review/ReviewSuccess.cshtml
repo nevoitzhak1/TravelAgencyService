@@ -1,0 +1,32 @@
+﻿namespace TravelAgencyService.Views.Review
+{
+    public class ReviewSuccess
+    {
+@{
+    ViewData["Title"] = "Thank You";
+}
+
+<div class="container d-flex justify-content-center align-items-center" style="min-height: 60vh;">
+    <div class="text-center">
+        <div class="mb-4">
+            <i class="bi bi-check-circle-fill text-success" style="font-size: 5rem;"></i>
+        </div>
+        <h1 class="display-5 fw-bold text-success mb-3">Thank You!</h1>
+        <p class="lead text-muted mb-4">Your review has been submitted successfully.</p>
+        <p class="text-muted">Redirecting to home page...</p>
+        <div class="spinner-border spinner-border-sm text-primary mt-2" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // חזרה לדף הבית אחרי 2 שניות
+        setTimeout(function() {
+            window.location.href = '@Url.Action("Index", "Home")';
+        }, 2000);
+    </script>
+}
+    }
+}
