@@ -34,7 +34,7 @@ namespace TravelAgencyService.Controllers
                 .Include(t => t.Reviews)
                 .Where(t => t.IsVisible && t.StartDate > DateTime.Now)
                 .OrderByDescending(t => t.TimesBooked)
-                
+
                 .Select(t => new TripViewModel
                 {
                     TripId = t.TripId,
@@ -67,11 +67,11 @@ namespace TravelAgencyService.Controllers
             // Get top 6 for featured cards (הכי פופולריים)
             var featuredTrips = allTrips.Take(6).ToList();
 
-            // Get recent reviews (last 3)
+            // Get recent TRIP reviews (for "What Travelers Say")
             var recentReviews = await _context.Reviews
                 .Include(r => r.User)
                 .Include(r => r.Trip)
-                .Where(r => r.IsApproved)
+                .Where(r => r.IsApproved && r.ReviewType == ReviewType.TripReview)
                 .OrderByDescending(r => r.CreatedAt)
                 .Take(3)
                 .Select(r => new ReviewViewModel
@@ -86,6 +86,24 @@ namespace TravelAgencyService.Controllers
                 })
                 .ToListAsync();
 
+            // Get SERVICE reviews (for "What Users Think About Our Service")
+            var serviceReviews = await _context.Reviews
+                .Include(r => r.User)
+                .Where(r => r.IsApproved && r.ReviewType == ReviewType.WebsiteReview)
+                .OrderByDescending(r => r.CreatedAt)
+                .Take(3)
+                .Select(r => new ReviewViewModel
+                {
+                    ReviewId = r.ReviewId,
+                    UserName = r.User != null ? $"{r.User.FirstName} {r.User.LastName}" : "Anonymous",
+                    Rating = r.Rating,
+                    Title = r.Title,
+                    Comment = r.Comment,
+                    CreatedAt = r.CreatedAt,
+                    TripName = ""
+                })
+                .ToListAsync();
+
             var viewModel = new HomeViewModel
             {
                 TotalTrips = totalTrips,
@@ -93,7 +111,8 @@ namespace TravelAgencyService.Controllers
                 TotalBookings = totalBookings,
                 FeaturedTrips = featuredTrips,
                 AllTrips = allTrips,
-                RecentReviews = recentReviews
+                RecentReviews = recentReviews,
+                ServiceReviews = serviceReviews
             };
 
             return View(viewModel);

@@ -259,31 +259,61 @@ namespace TravelAgencyService.Controllers
 
             if (ModelState.IsValid)
             {
+                using var transaction = await _context.Database.BeginTransactionAsync();
+
                 try
                 {
+                    var bookingIds = new List<int>();
                     var cardLastFour = model.CardNumber.Length >= 4
                         ? model.CardNumber.Substring(model.CardNumber.Length - 4)
                         : model.CardNumber;
 
-                    var (bookingIds, _) = await CreateBookingsFromCartAsync(
-                        userId!,
-                        markAsPaid: true,
-                        cardLastFourDigits: cardLastFour,
-                        ct: HttpContext.RequestAborted);
+                    foreach (var item in cartItems)
+                    {
+                        if (item.Trip == null) continue;
 
-                    // מחיקת עגלה כמו קודם
-                    var cartItemsToRemove = await _context.CartItems.Where(c => c.UserId == userId).ToListAsync();
-                    _context.CartItems.RemoveRange(cartItemsToRemove);
+                        var trip = await _context.Trips.FindAsync(item.TripId);
+                        if (trip == null || trip.AvailableRooms < item.NumberOfRooms)
+                        {
+                            await transaction.RollbackAsync();
+                            TempData["Error"] = $"'{item.Trip.PackageName}' is no longer available.";
+                            return RedirectToAction("Index");
+                        }
+
+                        var booking = new Booking
+                        {
+                            UserId = userId!,
+                            TripId = item.TripId,
+                            NumberOfRooms = item.NumberOfRooms,
+                            TotalPrice = trip.Price * item.NumberOfRooms,
+                            BookingDate = DateTime.Now,
+                            Status = BookingStatus.Confirmed,
+                            IsPaid = true,
+                            PaymentDate = DateTime.Now,
+                            CardLastFourDigits = cardLastFour,
+                            CreatedAt = DateTime.Now,
+                            UpdatedAt = DateTime.Now
+                        };
+
+                        trip.AvailableRooms -= item.NumberOfRooms;
+                        trip.TimesBooked++;
+                        trip.UpdatedAt = DateTime.Now;
+
+                        _context.Bookings.Add(booking);
+                        await _context.SaveChangesAsync();
+                        bookingIds.Add(booking.BookingId);
+                    }
+
+                    _context.CartItems.RemoveRange(cartItems);
                     await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
 
-                    TempData["Success"] = $"✅ Payment successful! {bookingIds.Count} booking(s) confirmed. You can view them in your email and under My Bookings.";
-                    TempData["ConfirmedBookingIds"] = string.Join(",", bookingIds);
-                    TempData["ConfirmedBookingsCount"] = bookingIds.Count;
-                    return RedirectToAction("Confirmation", "Booking");
-
+                    TempData["Success"] = $"Payment successful! {bookingIds.Count} booking(s) confirmed.";
+                    return RedirectToAction("MyBookings", "Booking");
                 }
                 catch
                 {
+                    await transaction.RollbackAsync();
                     TempData["Error"] = "An error occurred while processing your payment.";
                     return RedirectToAction("Index");
                 }
@@ -468,75 +498,5 @@ namespace TravelAgencyService.Controllers
 
             return View(model);
         }
-        private async Task<(List<int> bookingIds, decimal totalAmount)> CreateBookingsFromCartAsync(string userId,bool markAsPaid,string? cardLastFourDigits,CancellationToken ct){
-            var cartItems = await _context.CartItems
-                .Include(c => c.Trip)
-                .Where(c => c.UserId == userId)
-                .ToListAsync(ct);
-
-            if (!cartItems.Any())
-                throw new InvalidOperationException("Cart is empty.");
-
-            using var transaction = await _context.Database.BeginTransactionAsync(ct);
-
-            try
-            {
-                var bookingIds = new List<int>();
-                decimal totalAmount = 0m;
-
-                foreach (var item in cartItems)
-                {
-                    if (item.Trip == null) continue;
-
-                    var trip = await _context.Trips.FindAsync(new object[] { item.TripId }, ct);
-                    if (trip == null || trip.AvailableRooms < item.NumberOfRooms)
-                        throw new InvalidOperationException($"'{item.Trip?.PackageName ?? "Trip"}' is no longer available.");
-
-                    var amount = trip.Price * item.NumberOfRooms;
-                    totalAmount += amount;
-
-                    var booking = new Booking
-                    {
-                        UserId = userId,
-                        TripId = item.TripId,
-                        NumberOfRooms = item.NumberOfRooms,
-                        TotalPrice = amount,
-                        BookingDate = DateTime.Now,
-                        Status = markAsPaid ? BookingStatus.Confirmed : BookingStatus.Pending, // ⬅️ אם אין Pending אצלך, תגיד לי
-                        IsPaid = markAsPaid,
-                        PaymentDate = markAsPaid ? DateTime.Now : null,
-                        CardLastFourDigits = markAsPaid ? cardLastFourDigits : null,
-                        CreatedAt = DateTime.Now,
-                        UpdatedAt = DateTime.Now
-                    };
-
-                    // ✅ חשוב: כרגע אתה מוריד חדרים מיד עם כרטיס אשראי.
-                    // עם PayPal אנחנו עדיין לא רוצים "לשרוף" מלאי לפני התשלום.
-                    // אז רק אם markAsPaid=true נעדכן מלאי.
-                    if (markAsPaid)
-                    {
-                        trip.AvailableRooms -= item.NumberOfRooms;
-                        trip.TimesBooked++;
-                        trip.UpdatedAt = DateTime.Now;
-                    }
-
-                    _context.Bookings.Add(booking);
-                    await _context.SaveChangesAsync(ct);
-                    bookingIds.Add(booking.BookingId);
-                }
-
-                // בכרטיס אשראי אתה מוחק עגלה מיד — עם PayPal נרצה למחוק רק אחרי Capture.
-                // לכן כאן לא נוגעים בעגלה. (נעשה את זה בביצוע הסופי)
-                await transaction.CommitAsync(ct);
-
-                return (bookingIds, totalAmount);
-            }
-            catch
-            {
-                await transaction.RollbackAsync(ct);
-                throw;
-            }
-        }
-
     }
 }

@@ -25,7 +25,7 @@ namespace TravelAgencyService.Controllers
         }
 
         // GET: /Booking/MyBookings
-        public async Task<IActionResult> MyBookings(bool showPast = false)
+        public async Task<IActionResult> MyBookings(bool showPast = false, bool showCancelled = false)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
@@ -85,7 +85,8 @@ namespace TravelAgencyService.Controllers
                 UpcomingBookings = upcomingBookings,
                 PastBookings = pastBookings,
                 TotalBookings = bookings.Count,
-                ShowPastBookings = showPast
+                ShowPastBookings = showPast,
+                ShowCancelledBookings = showCancelled
             };
 
             return View(model);

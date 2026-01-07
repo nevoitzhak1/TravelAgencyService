@@ -257,7 +257,7 @@
                                                     </a>
                                                     <a asp-controller="Cart" asp-action="Add" asp-route-id="@trip.TripId"
                                                        class="btn btn-primary">
-                                                        <i class="bi bi-cart-plus"></i> Book
+                                                        <i class="bi bi-cart-plus"></i> Add to Cart
                                                     </a>
                                                 }
                                                 else
@@ -270,7 +270,7 @@
                                                     <a asp-controller="Account" asp-action="Login" 
                                                        asp-route-returnUrl="@Url.Action("Add", "Cart", new { id = trip.TripId })"
                                                        class="btn btn-primary">
-                                                        <i class="bi bi-cart-plus"></i> Book
+                                                        <i class="bi bi-cart-plus"></i> Add to Cart
                                                     </a>
                                                 }
                                             </div>
