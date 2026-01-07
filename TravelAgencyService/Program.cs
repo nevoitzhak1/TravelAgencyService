@@ -5,7 +5,7 @@ using TravelAgencyService.Middleware;
 using TravelAgencyService.Models;
 using TravelAgencyService.Services.Background;
 using TravelAgencyService.Services.Email;
-
+using TravelAgencyService.Services.PayPal;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -30,13 +30,14 @@ builder.Services.AddDefaultIdentity<ApplicationUser>(options =>
 })
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>();
-
 builder.Services.AddControllersWithViews();
 builder.Services.AddScoped<TravelAgencyService.Services.PdfService>();
 builder.Services.AddRazorPages();
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("Email"));
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 builder.Services.AddHostedService<TripReminderWorker>();
+builder.Services.Configure<PayPalOptions>(builder.Configuration.GetSection("PayPal"));
+builder.Services.AddHttpClient<PayPalClient>();
 
 var app = builder.Build();
 

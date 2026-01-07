@@ -90,6 +90,24 @@
                             </button>
                         </div>
                     </form>
+                    <div class="text-center my-3">
+                        <span class="text-muted">or</span>
+                    </div>
+
+                    <form asp-controller="PayPalRedirect" asp-action="StartFromCart" method="post">
+                        @Html.AntiForgeryToken()
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-warning btn-lg">
+                                <i class="bi bi-paypal"></i> Pay with PayPal
+                            </button>
+                        </div>
+
+                        <small class="text-muted d-block mt-2">
+                            You will be redirected to PayPal to complete the payment.
+                        </small>
+                    </form>
+
                 </div>
             </div>
         </div>
