@@ -1,70 +1,57 @@
-﻿@model TravelAgencyService.Models.ViewModels.BookingConfirmationViewModel
+﻿@model TravelAgencyService.Models.ViewModels.BookingConfirmationViewModel?
 
 @{
     ViewData["Title"] = "Booking Confirmed";
+
+    // Peek כדי שההודעה תישאר גם ל-Home
+    var successMsg = TempData.Peek("Success") as string;
+    var isCart = (ViewBag.IsCartConfirmation as bool?) ?? false;
+    var cartCount = ViewBag.ConfirmedBookingsCount?.ToString();
 }
 
-<div class="container">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card shadow">
-                <div class="card-body text-center py-5">
-                    <div class="mb-4">
-                        <i class="bi bi-check-circle text-success" style="font-size: 5rem;"></i>
-                    </div>
-                    <h2 class="text-success">Booking Confirmed!</h2>
-                    <p class="lead">Thank you for booking with Travel Agency</p>
-                    <p class="text-muted">Booking Reference: <strong>#@Model.BookingId</strong></p>
-                </div>
+<div class="container mt-5">
+    <div class="alert alert-success text-center">
+        <h4 class="mb-3">✅ Booking Confirmed!</h4>
 
-                <div class="card-body border-top">
-                    <div class="row">
-                        <div class="col-md-4">
-                            @if (!string.IsNullOrEmpty(Model.MainImageUrl))
-                            {
-                                <img src="@Model.MainImageUrl" class="img-fluid rounded" alt="@Model.PackageName">
-                            }
-                        </div>
-                        <div class="col-md-8">
-                            <h4>@Model.PackageName</h4>
-                            <p class="mb-1">
-                                <i class="bi bi-geo-alt text-danger"></i> @Model.Destination, @Model.Country
-                            </p>
-                            <p class="mb-1">
-                                <i class="bi bi-calendar text-primary"></i>
-                                @Model.StartDate.ToString("MMMM dd, yyyy") - @Model.EndDate.ToString("MMMM dd, yyyy")
-                            </p>
-                            <p class="mb-1">
-                                <i class="bi bi-door-open"></i> @Model.NumberOfRooms room(s)
-                            </p>
-                            <p class="mb-0 fs-5">
-                                <strong>Total Paid: $@Model.TotalPrice</strong>
-                                <span class="badge bg-success ms-2">Paid</span>
-                            </p>
-                        </div>
-                    </div>
-                </div>
+        @if (!string.IsNullOrEmpty(successMsg))
+        {
+            <p class="mb-2">@successMsg</p>
+        }
 
-                <div class="card-body border-top">
-                    <h5><i class="bi bi-envelope"></i> Confirmation Email Sent</h5>
-                    <p class="text-muted">A confirmation email has been sent to your registered email address with all the booking details.</p>
+        @if (isCart)
+        {
+            <p class="mb-2">
+                <strong>@cartCount</strong> booking(s) confirmed.<br />
+                You can find the details in your email and under
+                <a asp-controller="Booking" asp-action="MyBookings" class="alert-link">My Bookings</a>.
+            </p>
+        }
+        else if (Model != null)
+        {
+            <p class="mb-2">
+                Package: <strong>@Model.PackageName</strong><br />
+                Destination: <strong>@Model.Destination</strong>, <strong>@Model.Country</strong><br />
+                Dates: <strong>@Model.StartDate.ToString("dd/MM/yyyy")</strong> - <strong>@Model.EndDate.ToString("dd/MM/yyyy")</strong>
+            </p>
 
-                    <h5 class="mt-4"><i class="bi bi-download"></i> Download Your Itinerary</h5>
-                    <p class="text-muted">Your detailed trip itinerary is now available for download.</p>
-                    <a asp-action="DownloadItinerary" asp-route-id="@Model.BookingId" class="btn btn-outline-primary">
-                        <i class="bi bi-file-earmark-text"></i> Download Itinerary
-                    </a>
-                </div>
+            <p class="mb-2">
+                You can find the details in your email and under
+                <a asp-controller="Booking" asp-action="MyBookings" class="alert-link">My Bookings</a>.
+            </p>
+        }
 
-                <div class="card-footer text-center">
-                    <a asp-action="MyBookings" class="btn btn-primary me-2">
-                        <i class="bi bi-calendar-check"></i> View My Bookings
-                    </a>
-                    <a asp-controller="Trip" asp-action="Index" class="btn btn-outline-secondary">
-                        <i class="bi bi-search"></i> Browse More Trips
-                    </a>
-                </div>
-            </div>
-        </div>
+        <p class="text-muted mb-0">
+            Redirecting to the home page...
+        </p>
+    </div>
+
+    <div class="text-center mt-3">
+        <a asp-controller="Home" asp-action="Index" class="btn btn-primary">Go to Home Now</a>
     </div>
 </div>
+
+<script>
+    setTimeout(function () {
+        window.location.href = '@Url.Action("Index", "Home")';
+    }, 2000);
+</script>

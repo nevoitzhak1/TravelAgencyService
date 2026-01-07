@@ -155,6 +155,45 @@
                                 Make this trip visible to users
                             </label>
                         </div>
+                        <h5 class="border-bottom pb-2 mb-3 mt-4">Reminders (Email)</h5>
+                        <p class="text-muted small mb-2">
+                            Add multiple reminders (e.g., 7 days before, 1 month before). They will be emailed to all users who booked this trip.
+                        </p>
+
+                        <div id="remindersContainer">
+                            @for (int i = 0; i < (Model.ReminderRules.Count == 0 ? 1 : Model.ReminderRules.Count); i++)
+                            {
+                                <div class="row align-items-end mb-2 reminder-row">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Amount</label>
+                                        <input class="form-control"
+                                               name="ReminderRules[@i].OffsetAmount"
+                                               type="number"
+                                               value="@(Model.ReminderRules.Count == 0 ? 7 : Model.ReminderRules[i].OffsetAmount)" />
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Unit</label>
+                                        <select class="form-select" name="ReminderRules[@i].OffsetUnit">
+                                            <option value="Days">Days</option>
+                                            <option value="Months">Months</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Active</label>
+                                        <input class="form-check-input ms-2" type="checkbox" name="ReminderRules[@i].IsActive" value="true" checked />
+                                    </div>
+                                    <div class="col-md-1 text-end">
+                                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeReminderRow(this)">X</button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        <button type="button" class="btn btn-outline-primary btn-sm mt-2" onclick="addReminderRow()">
+                            <i class="bi bi-plus"></i> Add reminder
+                        </button>
+
+                        
 
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
                             <a asp-action="ManageTrips" class="btn btn-outline-secondary">
@@ -277,6 +316,54 @@
                 .catch(error => console.error('Failed to load countries:', error));
         });
     </script>
+    <script>
+        function addReminderRow() {
+            const container = document.getElementById("remindersContainer");
+            const index = container.querySelectorAll(".reminder-row").length;
+
+            const div = document.createElement("div");
+            div.className = "row align-items-end mb-2 reminder-row";
+            div.innerHTML = `
+                <div class="col-md-4">
+                    <label class="form-label">Amount</label>
+                    <input class="form-control" name="ReminderRules[${index}].OffsetAmount" type="number" value="7" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Unit</label>
+                    <select class="form-select" name="ReminderRules[${index}].OffsetUnit">
+                        <option value="Days">Days</option>
+                        <option value="Months">Months</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Active</label>
+                    <input class="form-check-input ms-2" type="checkbox" name="ReminderRules[${index}].IsActive" value="true" checked />
+                </div>
+                <div class="col-md-1 text-end">
+                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeReminderRow(this)">X</button>
+                </div>`;
+            container.appendChild(div);
+        }
+
+        function removeReminderRow(btn) {
+            const row = btn.closest(".reminder-row");
+            row.remove();
+            reindexReminderRows();
+        }
+
+        // חובה כדי שה־ModelBinder לא יישבר אחרי מחיקות
+        function reindexReminderRows() {
+            const rows = document.querySelectorAll("#remindersContainer .reminder-row");
+            rows.forEach((row, i) => {
+                row.querySelectorAll("input, select").forEach(el => {
+                    const name = el.getAttribute("name");
+                    if (!name) return;
+                    el.setAttribute("name", name.replace(/ReminderRules\[\d+\]/g, `ReminderRules[${i}]`));
+                });
+            });
+        }
+    </script>
+
     <script>
         function updatePreview() {
             // Package Name

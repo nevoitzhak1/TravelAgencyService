@@ -102,8 +102,9 @@ namespace TravelAgencyService.Controllers
 
                     // TODO: Send confirmation email
 
-                    TempData["Success"] = "Payment successful! Your booking is confirmed.";
+                    TempData["Success"] = "✅ Payment successful! Your booking is confirmed. You can view it in your email and under My Bookings.";
                     return RedirectToAction("Confirmation", "Booking", new { id = booking.BookingId });
+
                 }
                 else
                 {

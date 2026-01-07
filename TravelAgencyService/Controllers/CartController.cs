@@ -317,6 +317,7 @@ namespace TravelAgencyService.Controllers
                     TempData["Error"] = "An error occurred while processing your payment.";
                     return RedirectToAction("Index");
                 }
+
             }
 
             model.Items = cartItems.Select(c => new CartItemViewModel

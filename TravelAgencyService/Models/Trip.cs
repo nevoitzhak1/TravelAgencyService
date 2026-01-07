@@ -108,6 +108,7 @@ namespace TravelAgencyService.Models
         public virtual ICollection<Booking>? Bookings { get; set; }
         public virtual ICollection<WaitingListEntry>? WaitingList { get; set; }
         public virtual ICollection<Review>? Reviews { get; set; }
+        public virtual ICollection<TripReminderRule>? ReminderRules { get; set; }
 
         // Computed properties (not stored in database)
         [NotMapped]
