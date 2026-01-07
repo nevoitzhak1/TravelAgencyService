@@ -32,7 +32,6 @@ namespace TravelAgencyService.Models
         [Display(Name = "Notification Date")]
         public DateTime? NotificationDate { get; set; }
 
-        // When notified, user has limited time to book
         [Display(Name = "Notification Expires")]
         public DateTime? NotificationExpiresAt { get; set; }
 
@@ -45,12 +44,6 @@ namespace TravelAgencyService.Models
 
         [ForeignKey("TripId")]
         public virtual Trip? Trip { get; set; }
-
-        // Computed properties
-        [NotMapped]
-        public bool CanBook => Status == WaitingListStatus.Notified &&
-                               NotificationExpiresAt.HasValue &&
-                               NotificationExpiresAt > DateTime.Now;
     }
 
     public enum WaitingListStatus

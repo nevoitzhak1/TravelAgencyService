@@ -126,7 +126,6 @@ namespace TravelAgencyService.Controllers
         }
 
         // POST: /Admin/CreateTrip
-        
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> CreateTrip(TripCreateViewModel model)
@@ -160,7 +159,6 @@ namespace TravelAgencyService.Controllers
                     UpdatedAt = DateTime.Now
                 };
 
-                
                 try
                 {
                     using (var httpClient = new HttpClient())
@@ -186,6 +184,25 @@ namespace TravelAgencyService.Controllers
 
                 _context.Trips.Add(trip);
                 await _context.SaveChangesAsync();
+                if (model.ReminderRules != null && model.ReminderRules.Any())
+                {
+                    var rules = model.ReminderRules
+                        .Where(r => r.OffsetAmount > 0 && r.IsActive)
+                        .Select(r => new TripReminderRule
+                        {
+                            TripId = trip.TripId,
+                            OffsetAmount = r.OffsetAmount,
+                            OffsetUnit = r.OffsetUnit,
+                            IsActive = true
+                        })
+                        .ToList();
+
+                    if (rules.Any())
+                    {
+                        _context.TripReminderRules.AddRange(rules);
+                        await _context.SaveChangesAsync();
+                    }
+                }
 
                 TempData["Success"] = $"Trip '{trip.PackageName}' created successfully!";
                 return RedirectToAction(nameof(ManageTrips));
@@ -228,6 +245,17 @@ namespace TravelAgencyService.Controllers
                 TimesBooked = trip.TimesBooked,
                 CreatedAt = trip.CreatedAt
             };
+            model.ReminderRules = await _context.TripReminderRules
+                 .Where(r => r.TripId == id && r.IsActive)
+                 .OrderBy(r => r.OffsetUnit).ThenBy(r => r.OffsetAmount)
+                 .Select(r => new ReminderRuleInput
+                 {
+                    TripReminderRuleId = r.TripReminderRuleId,
+                    OffsetAmount = r.OffsetAmount,
+                    OffsetUnit = r.OffsetUnit,
+                    IsActive = r.IsActive
+                })
+                 .ToListAsync();
 
             return View(model);
         }
@@ -263,6 +291,7 @@ namespace TravelAgencyService.Controllers
                 trip.EndDate = model.EndDate;
                 trip.Price = model.Price;
                 trip.TotalRooms = model.TotalRooms;
+                trip.AvailableRooms = model.AvailableRooms;
                 trip.PackageType = model.PackageType;
                 trip.MinimumAge = model.MinimumAge;
                 trip.MaximumAge = model.MaximumAge;
@@ -276,6 +305,50 @@ namespace TravelAgencyService.Controllers
                 await _context.SaveChangesAsync();
 
                 TempData["Success"] = $"Trip '{trip.PackageName}' updated successfully!";
+                // Deactivate all existing rules for this trip (keeps send logs intact)
+                var existing = await _context.TripReminderRules.Where(r => r.TripId == id).ToListAsync();
+                foreach (var r in existing) r.IsActive = false;
+
+                // Re-activate/update or add new ones
+                if (model.ReminderRules != null)
+                {
+                    foreach (var input in model.ReminderRules.Where(x => x.OffsetAmount > 0 && x.IsActive))
+                    {
+                        if (input.TripReminderRuleId.HasValue)
+                        {
+                            var rule = existing.FirstOrDefault(x => x.TripReminderRuleId == input.TripReminderRuleId.Value);
+                            if (rule != null)
+                            {
+                                rule.OffsetAmount = input.OffsetAmount;
+                                rule.OffsetUnit = input.OffsetUnit;
+                                rule.IsActive = true;
+                            }
+                            else
+                            {
+                                _context.TripReminderRules.Add(new TripReminderRule
+                                {
+                                    TripId = id,
+                                    OffsetAmount = input.OffsetAmount,
+                                    OffsetUnit = input.OffsetUnit,
+                                    IsActive = true
+                                });
+                            }
+                        }
+                        else
+                        {
+                            _context.TripReminderRules.Add(new TripReminderRule
+                            {
+                                TripId = id,
+                                OffsetAmount = input.OffsetAmount,
+                                OffsetUnit = input.OffsetUnit,
+                                IsActive = true
+                            });
+                        }
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+
                 return RedirectToAction(nameof(ManageTrips));
             }
 
@@ -311,7 +384,6 @@ namespace TravelAgencyService.Controllers
                 return NotFound();
             }
 
-            // Check if there are active bookings
             if (trip.Bookings != null && trip.Bookings.Any(b => b.Status == BookingStatus.Confirmed))
             {
                 TempData["Error"] = "Cannot delete trip with active bookings. Cancel all bookings first.";
@@ -381,7 +453,6 @@ namespace TravelAgencyService.Controllers
                     return NotFound();
                 }
 
-                // Store original price if not already stored
                 if (!trip.OriginalPrice.HasValue)
                 {
                     trip.OriginalPrice = trip.Price;
@@ -537,6 +608,55 @@ namespace TravelAgencyService.Controllers
 
             return View(viewModel);
         }
+        // POST: /Admin/DeleteUser/id
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteUser(string id)
+        {
+            var user = await _userManager.FindByIdAsync(id);
+
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            // Don't allow deleting admin users
+            var roles = await _userManager.GetRolesAsync(user);
+            if (roles.Contains("Admin"))
+            {
+                TempData["Error"] = "Cannot delete admin users!";
+                return RedirectToAction(nameof(ManageUsers));
+            }
+
+            // Delete related data first
+            var bookings = await _context.Bookings.Where(b => b.UserId == id).ToListAsync();
+            _context.Bookings.RemoveRange(bookings);
+
+            var cartItems = await _context.CartItems.Where(c => c.UserId == id).ToListAsync();
+            _context.CartItems.RemoveRange(cartItems);
+
+            var waitingListEntries = await _context.WaitingListEntries.Where(w => w.UserId == id).ToListAsync();
+            _context.WaitingListEntries.RemoveRange(waitingListEntries);
+
+            var reviews = await _context.Reviews.Where(r => r.UserId == id).ToListAsync();
+            _context.Reviews.RemoveRange(reviews);
+
+            await _context.SaveChangesAsync();
+
+            // Delete user
+            var result = await _userManager.DeleteAsync(user);
+
+            if (result.Succeeded)
+            {
+                TempData["Success"] = $"User '{user.Email}' and all related data have been deleted.";
+            }
+            else
+            {
+                TempData["Error"] = "Failed to delete user: " + string.Join(", ", result.Errors.Select(e => e.Description));
+            }
+
+            return RedirectToAction(nameof(ManageUsers));
+        }
 
         // POST: /Admin/ToggleUserStatus/id
         [HttpPost]
@@ -653,8 +773,8 @@ namespace TravelAgencyService.Controllers
                 .Include(w => w.Trip)
                 .Where(w => w.Status == WaitingListStatus.Waiting)
                 .OrderBy(w => w.TripId)
-                .ThenBy(w => w.Position)
-                .Select(w => new WaitingListItemViewModel
+                .ThenBy(w => w.JoinedDate)
+                .Select(w => new AdminWaitingListItemViewModel
                 {
                     WaitingListEntryId = w.WaitingListEntryId,
                     UserName = w.User != null ? $"{w.User.FirstName} {w.User.LastName}" : "Unknown",
@@ -665,11 +785,13 @@ namespace TravelAgencyService.Controllers
                     JoinedDate = w.JoinedDate,
                     RoomsRequested = w.RoomsRequested,
                     Status = w.Status,
-                    IsNotified = w.IsNotified
+                    IsNotified = w.IsNotified,
+                    NotificationDate = w.NotificationDate,
+                    NotificationExpiresAt = w.NotificationExpiresAt
                 })
                 .ToListAsync();
 
-            var viewModel = new WaitingListViewModel
+            var viewModel = new AdminWaitingListViewModel
             {
                 Entries = entries,
                 TotalEntries = entries.Count
@@ -700,9 +822,7 @@ namespace TravelAgencyService.Controllers
 
             await _context.SaveChangesAsync();
 
-            // TODO: Send email notification here
-
-            TempData["Success"] = $"User '{entry.User?.Email}' has been notified about availability for '{entry.Trip?.PackageName}'";
+            TempData["Success"] = $"User '{entry.User?.Email}' has been notified!";
             return RedirectToAction(nameof(WaitingList));
         }
 

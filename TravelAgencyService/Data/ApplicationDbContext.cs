@@ -12,6 +12,8 @@ namespace TravelAgencyService.Data
         }
 
         // DbSets - these become tables in your database
+        public DbSet<TripReminderRule> TripReminderRules { get; set; }
+        public DbSet<TripReminderSendLog> TripReminderSendLogs { get; set; }
         public DbSet<Trip> Trips { get; set; }
         public DbSet<TripImage> TripImages { get; set; }
         public DbSet<Booking> Bookings { get; set; }
@@ -55,6 +57,14 @@ namespace TravelAgencyService.Data
                       .WithOne(r => r.Trip)
                       .HasForeignKey(r => r.TripId)
                       .OnDelete(DeleteBehavior.Cascade);
+               
+                // One trip has many reminder rules
+                entity.HasMany(t => t.ReminderRules)
+                      .WithOne(r => r.Trip)
+                      .HasForeignKey(r => r.TripId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+
             });
 
             // TripImage configuration
@@ -127,6 +137,14 @@ namespace TravelAgencyService.Data
                 // User can only have one cart item per trip
                 entity.HasIndex(c => new { c.UserId, c.TripId }).IsUnique();
             });
+
+            // TripReminderRule configuration
+            builder.Entity<TripReminderSendLog>(entity =>
+            {
+                entity.HasKey(x => x.TripReminderSendLogId);
+                entity.HasIndex(x => new { x.TripReminderRuleId, x.BookingId }).IsUnique();
+            });
+
         }
     }
 }

@@ -94,7 +94,19 @@ namespace TravelAgencyService.Models.ViewModels
         [Display(Name = "Cancellation Days Limit")]
         [Range(0, 365)]
         public int CancellationDaysLimit { get; set; } = 7;
+        public List<ReminderRuleInput> ReminderRules { get; set; } = new();
+
     }
+
+    public class ReminderRuleInput
+    {
+        public int? TripReminderRuleId { get; set; } // לעריכה
+        [Range(1, 1200)]
+        public int OffsetAmount { get; set; } = 7;
+        public ReminderOffsetUnit OffsetUnit { get; set; } = ReminderOffsetUnit.Days;
+        public bool IsActive { get; set; } = true;
+    }
+
 
     public class TripEditViewModel : TripCreateViewModel
     {

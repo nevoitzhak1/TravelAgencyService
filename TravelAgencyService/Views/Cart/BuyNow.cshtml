@@ -1,0 +1,190 @@
+﻿@model TravelAgencyService.Models.ViewModels.BuyNowViewModel
+
+@{
+    ViewData["Title"] = "Quick Checkout";
+}
+
+<div class="container">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a asp-controller="Trip" asp-action="Details" asp-route-id="@Model.TripId">@Model.PackageName</a></li>
+            <li class="breadcrumb-item active">Checkout</li>
+        </ol>
+    </nav>
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            <i class="bi bi-exclamation-triangle"></i> @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="row">
+        <div class="col-md-7">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><i class="bi bi-lightning"></i> Quick Checkout</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-success d-flex align-items-center mb-4">
+                        <i class="bi bi-shield-lock fs-4 me-2"></i>
+                        <div>
+                            <strong>Secure Payment</strong><br>
+                            <small>Your payment information is encrypted</small>
+                        </div>
+                    </div>
+
+                    <form asp-action="BuyNow" method="post">
+                        <input type="hidden" asp-for="TripId" />
+                        <input type="hidden" asp-for="PackageName" />
+                        <input type="hidden" asp-for="Destination" />
+                        <input type="hidden" asp-for="Country" />
+                        <input type="hidden" asp-for="StartDate" />
+                        <input type="hidden" asp-for="EndDate" />
+                        <input type="hidden" asp-for="PricePerRoom" />
+                        <input type="hidden" asp-for="OriginalPrice" />
+                        <input type="hidden" asp-for="IsOnSale" />
+                        <input type="hidden" asp-for="MainImageUrl" />
+                        <input type="hidden" asp-for="AvailableRooms" />
+
+                        <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+
+                        <div class="mb-4">
+                            <label asp-for="NumberOfRooms" class="form-label fw-bold"></label>
+                            <select asp-for="NumberOfRooms" class="form-select form-select-lg" id="roomsSelect">
+                                @for (int i = 1; i <= Math.Min(10, Model.AvailableRooms); i++)
+                                {
+                                    <option value="@i">@i room(s) - $@(Model.PricePerRoom* i)</option>
+                                }
+                            </select>
+                            <small class="text-muted">@Model.AvailableRooms rooms available</small>
+                        </div>
+
+                        <hr />
+
+                        <h5 class="mb-3"><i class="bi bi-credit-card"></i> Payment Details</h5>
+
+                        <div class="mb-3">
+                            <label asp-for="CardholderName" class="form-label"></label>
+                            <input asp-for="CardholderName" class="form-control" placeholder="John Smith" />
+                            <span asp-validation-for="CardholderName" class="text-danger"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="CardNumber" class="form-label"></label>
+                            <input asp-for="CardNumber" class="form-control" placeholder="4111 1111 1111 1111" maxlength="19" />
+                            <span asp-validation-for="CardNumber" class="text-danger"></span>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label asp-for="ExpiryMonth" class="form-label"></label>
+                                <select asp-for="ExpiryMonth" class="form-select">
+                                    <option value="">Month</option>
+                                    @for (int i = 1; i <= 12; i++)
+                                    {
+                                        <option value="@i">@i.ToString("00")</option>
+                                    }
+                                </select>
+                                <span asp-validation-for="ExpiryMonth" class="text-danger"></span>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label asp-for="ExpiryYear" class="form-label"></label>
+                                <select asp-for="ExpiryYear" class="form-select">
+                                    <option value="">Year</option>
+                                    @for (int i = DateTime.Now.Year; i <= DateTime.Now.Year + 10; i++)
+                                    {
+                                        <option value="@i">@i</option>
+                                    }
+                                </select>
+                                <span asp-validation-for="ExpiryYear" class="text-danger"></span>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label asp-for="CVV" class="form-label"></label>
+                                <input asp-for="CVV" class="form-control" placeholder="123" maxlength="4" />
+                                <span asp-validation-for="CVV" class="text-danger"></span>
+                            </div>
+                        </div>
+
+                        <hr />
+
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <span class="fs-5">Total:</span>
+                            <span class="fs-4 fw-bold text-success" id="totalDisplay">$@Model.TotalPrice</span>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="bi bi-lock"></i> Pay Now
+                            </button>
+                            <a asp-controller="Trip" asp-action="Details" asp-route-id="@Model.TripId" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left"></i> Back
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-5">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-receipt"></i> Order Summary</h5>
+                </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrEmpty(Model.MainImageUrl))
+                    {
+                        <img src="@Model.MainImageUrl" class="img-fluid rounded mb-3" alt="@Model.PackageName">
+                    }
+
+                    <h5>@Model.PackageName</h5>
+                    <p class="text-muted mb-1">
+                        <i class="bi bi-geo-alt"></i> @Model.Destination, @Model.Country
+                    </p>
+                    <p class="text-muted">
+                        <i class="bi bi-calendar"></i> @Model.StartDate.ToString("MMM dd") - @Model.EndDate.ToString("MMM dd, yyyy")
+                        <span class="badge bg-info">@Model.TripDurationDays days</span>
+                    </p>
+
+                    <hr />
+
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Price per room:</span>
+                        @if (Model.IsOnSale && Model.OriginalPrice.HasValue)
+                        {
+                            <span>
+                                <del class="text-muted">$@Model.OriginalPrice</del>
+                                <strong class="text-danger">$@Model.PricePerRoom</strong>
+                            </span>
+                        }
+                        else
+                        {
+                            <strong>$@Model.PricePerRoom</strong>
+                        }
+                    </div>
+
+                    <hr />
+
+                    <div class="d-flex justify-content-between fw-bold fs-5">
+                        <span>Total</span>
+                        <span class="text-success" id="summaryTotal">$@Model.TotalPrice</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.getElementById('roomsSelect').addEventListener('change', function() {
+            var rooms = parseInt(this.value);
+            var price = @Model.PricePerRoom;
+            var total = rooms * price;
+            document.getElementById('totalDisplay').textContent = '$' + total;
+            document.getElementById('summaryTotal').textContent = '$' + total;
+        });
+    </script>
+}

@@ -1,0 +1,167 @@
+﻿@model IEnumerable<TravelAgencyService.Models.WaitingListEntry>
+
+@{
+    ViewData["Title"] = "Waiting List Details";
+    var tripName = ViewBag.TripName as string;
+    var availableRooms = (int)ViewBag.AvailableRooms;
+}
+
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a asp-action="Index">Waiting Lists</a></li>
+            <li class="breadcrumb-item active">@tripName</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1><i class="bi bi-list-ol"></i> Waiting List Queue</h1>
+            <h5 class="text-muted">@tripName</h5>
+        </div>
+        <div class="text-end">
+            <span class="badge @(availableRooms > 0 ? "bg-success" : "bg-danger") fs-6">
+                @availableRooms rooms available
+            </span>
+        </div>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            @TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="card shadow">
+        <div class="card-body">
+            @if (Model != null && Model.Any())
+            {
+                var orderedQueue = Model.OrderBy(e => e.JoinedDate).ToList();
+
+                <div class="alert alert-info mb-4">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>FIFO Queue:</strong> First person to join is #1. Only the first person can be notified.
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Position</th>
+                                <th>User</th>
+                                <th>Email</th>
+                                <th>Rooms</th>
+                                <th>Joined</th>
+                                <th>Status</th>
+                                <th>Notification</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (int i = 0; i < orderedQueue.Count; i++)
+                            {
+                                var entry = orderedQueue[i];
+                                var position = i + 1;
+
+                                <tr class="@(position == 1 ? "table-warning" : "")">
+                                    <td>
+                                        <span class="badge @(position == 1 ? "bg-warning text-dark" : "bg-secondary") fs-6">
+                                            #@position
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <strong>@(entry.User?.FirstName ?? "Unknown") @(entry.User?.LastName ?? "")</strong>
+                                    </td>
+                                    <td>@(entry.User?.Email ?? "N/A")</td>
+                                    <td>@entry.RoomsRequested</td>
+                                    <td>@entry.JoinedDate.ToString("MMM dd, yyyy HH:mm")</td>
+                                    <td>
+                                        @switch (entry.Status)
+                                        {
+                                            case WaitingListStatus.Waiting:
+                                                <span class="badge bg-warning text-dark">Waiting</span>
+                                                break;
+                                            case WaitingListStatus.Notified:
+                                                <span class="badge bg-info">Notified</span>
+                                                break;
+                                            case WaitingListStatus.Booked:
+                                                <span class="badge bg-success">Booked</span>
+                                                break;
+                                            case WaitingListStatus.Expired:
+                                                <span class="badge bg-secondary">Expired</span>
+                                                break;
+                                            case WaitingListStatus.Cancelled:
+                                                <span class="badge bg-dark">Cancelled</span>
+                                                break;
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (entry.IsNotified)
+                                        {
+                                            <div class="small">
+                                                <div><strong>Sent:</strong> @entry.NotificationDate?.ToString("MMM dd HH:mm")</div>
+                                                <div><strong>Expires:</strong> @entry.NotificationExpiresAt?.ToString("MMM dd HH:mm")</div>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">—</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (position == 1 && entry.Status == WaitingListStatus.Waiting && !entry.IsNotified && availableRooms > 0)
+                                        {
+                                            <form asp-action="NotifyNext" asp-route-tripId="@entry.TripId" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-sm btn-primary"
+                                                        title="Notify first person in queue">
+                                                    <i class="bi bi-bell"></i> Notify #1
+                                                </button>
+                                            </form>
+                                        }
+                                        else if (position == 1 && entry.IsNotified)
+                                        {
+                                            <span class="badge bg-info">Already notified</span>
+                                        }
+                                        else if (position > 1)
+                                        {
+                                            <span class="text-muted small">Must wait for turn</span>
+                                        }
+                                        else if (availableRooms <= 0)
+                                        {
+                                            <span class="text-danger small">No rooms available</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-3 small text-muted">
+                    <i class="bi bi-info-circle"></i>
+                    Queue position is determined by <strong>JoinedDate</strong> (FIFO - First In, First Out).
+                    Only the first person can be notified when a room becomes available.
+                </div>
+            }
+            else
+            {
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox fs-1 text-muted"></i>
+                    <h4 class="mt-3">Empty Queue</h4>
+                    <p class="text-muted">No one is currently waiting for this trip.</p>
+                </div>
+            }
+        </div>
+    </div>
+</div>

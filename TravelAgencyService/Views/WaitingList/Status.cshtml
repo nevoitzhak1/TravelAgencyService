@@ -1,0 +1,146 @@
+﻿@model TravelAgencyService.Models.ViewModels.WaitingListStatusViewModel
+
+@{
+    ViewData["Title"] = "Waiting List Status";
+}
+
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-lg">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #667eea, #764ba2);">
+                    <h3 class="mb-0">
+                        <i class="bi bi-hourglass-split"></i> Waiting List Status
+                    </h3>
+                </div>
+
+                <div class="card-body p-4">
+                    @if (TempData["Success"] != null)
+                    {
+                        <div class="alert alert-success alert-dismissible fade show">
+                            <i class="bi bi-check-circle"></i> @TempData["Success"]
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    }
+
+                    @if (TempData["Error"] != null)
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show">
+                            <i class="bi bi-exclamation-triangle"></i> @TempData["Error"]
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(Model.Message))
+                    {
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> @Model.Message
+                        </div>
+                    }
+
+                    <!-- Trip Info -->
+                    <div class="card mb-4 border-0" style="background: #f8f9fa;">
+                        <div class="card-body">
+                            <h4 class="mb-3">
+                                <i class="bi bi-airplane-fill text-primary"></i> @Model.PackageName
+                            </h4>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <p class="mb-2">
+                                        <strong>Available Rooms:</strong>
+                                        <span class="badge @(Model.AvailableRooms > 0 ? "bg-success" : "bg-danger")">
+                                            @Model.AvailableRooms
+                                        </span>
+                                    </p>
+                                </div>
+                                <div class="col-md-6">
+                                    <p class="mb-2">
+                                        <strong>People Waiting:</strong>
+                                        <span class="badge bg-warning text-dark">@Model.TotalWaiting</span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Queue Status -->
+                    <div class="card mb-4 border-primary">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="bi bi-list-ol"></i> Your Queue Status</h5>
+                        </div>
+                        <div class="card-body">
+                            @if (Model.MyPosition.HasValue)
+                            {
+                                <div class="text-center py-3">
+                                    <div class="display-1 fw-bold text-primary mb-2">
+                                        #@Model.MyPosition.Value
+                                    </div>
+                                    <p class="text-muted">Your position in queue</p>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="text-center py-3">
+                                    <i class="bi bi-dash-circle text-muted" style="font-size: 3rem;"></i>
+                                    <p class="text-muted mt-2">You are not in the waiting list</p>
+                                </div>
+                            }
+
+                            <div class="alert alert-light border mt-3">
+                                <strong><i class="bi bi-clock-history"></i> Estimated Wait Time:</strong>
+                                <p class="mb-0">@Model.EtaText</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- How It Works -->
+                    <div class="card mb-4 border-0" style="background: #fff3cd;">
+                        <div class="card-body">
+                            <h6 class="fw-bold">
+                                <i class="bi bi-info-circle text-warning"></i> How the Waiting List Works:
+                            </h6>
+                            <ol class="mb-0 small">
+                                <li>Join the waiting list when trip is fully booked</li>
+                                <li>First-come, first-served (FIFO) order</li>
+                                <li>When a room becomes available, we'll notify you by email</li>
+                                <li>You have <strong>24 hours</strong> to complete your booking</li>
+                                <li>If you don't book in time, the next person will be notified</li>
+                            </ol>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="d-flex gap-2 flex-wrap">
+                        @if (Model.CanJoin)
+                        {
+                            <form asp-action="Join" asp-controller="WaitingList" method="post" class="flex-fill">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="tripId" value="@Model.TripId" />
+                                <button type="submit" class="btn btn-warning w-100">
+                                    <i class="bi bi-plus-circle"></i> Join Waiting List
+                                </button>
+                            </form>
+                        }
+
+                        @if (Model.CanLeave)
+                        {
+                            <form asp-action="Leave" asp-controller="WaitingList" method="post" class="flex-fill">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="tripId" value="@Model.TripId" />
+                                <button type="submit" class="btn btn-danger w-100"
+                                        onclick="return confirm('Are you sure you want to leave the waiting list?')">
+                                    <i class="bi bi-x-circle"></i> Leave Waiting List
+                                </button>
+                            </form>
+                        }
+
+                        <a asp-controller="Trip" asp-action="Details" asp-route-id="@Model.TripId"
+                           class="btn btn-outline-secondary flex-fill">
+                            <i class="bi bi-arrow-left"></i> Back to Trip
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -6,6 +6,7 @@ using System.Security.Claims;
 using TravelAgencyService.Data;
 using TravelAgencyService.Models;
 using TravelAgencyService.Models.ViewModels;
+using TravelAgencyService.Services;
 
 namespace TravelAgencyService.Controllers
 {
@@ -14,11 +15,13 @@ namespace TravelAgencyService.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly PdfService _pdfService;
 
-        public BookingController(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
+        public BookingController(ApplicationDbContext context, UserManager<ApplicationUser> userManager, PdfService pdfService)
         {
             _context = context;
             _userManager = userManager;
+            _pdfService = pdfService;
         }
 
         // GET: /Booking/MyBookings
@@ -60,7 +63,6 @@ namespace TravelAgencyService.Controllers
                     HasReviewed = hasReviewed
                 };
 
-                // Calculate if can be cancelled
                 if (booking.Trip != null && booking.Status == BookingStatus.Confirmed)
                 {
                     var daysUntilTrip = (booking.Trip.StartDate - DateTime.Now).Days;
@@ -94,7 +96,6 @@ namespace TravelAgencyService.Controllers
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // Check if user already has 3 active bookings
             var activeBookingsCount = await _context.Bookings
                 .CountAsync(b => b.UserId == userId &&
                                  b.Status == BookingStatus.Confirmed &&
@@ -137,7 +138,6 @@ namespace TravelAgencyService.Controllers
                 return RedirectToAction("Details", "Trip", new { id });
             }
 
-            // Check age restriction
             var user = await _userManager.GetUserAsync(User);
             if (user?.DateOfBirth != null)
             {
@@ -183,7 +183,6 @@ namespace TravelAgencyService.Controllers
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // Re-check active bookings
             var activeBookingsCount = await _context.Bookings
                 .CountAsync(b => b.UserId == userId &&
                                  b.Status == BookingStatus.Confirmed &&
@@ -202,7 +201,6 @@ namespace TravelAgencyService.Controllers
                 return NotFound();
             }
 
-            // Check availability with concurrency in mind
             if (trip.AvailableRooms < model.NumberOfRooms)
             {
                 TempData["Error"] = $"Only {trip.AvailableRooms} rooms are available. Please try again with fewer rooms.";
@@ -211,12 +209,10 @@ namespace TravelAgencyService.Controllers
 
             if (ModelState.IsValid)
             {
-                // Use a transaction to ensure atomicity
                 using var transaction = await _context.Database.BeginTransactionAsync();
 
                 try
                 {
-                    // Re-fetch trip with lock
                     var tripToUpdate = await _context.Trips
                         .FirstOrDefaultAsync(t => t.TripId == model.TripId);
 
@@ -227,7 +223,6 @@ namespace TravelAgencyService.Controllers
                         return RedirectToAction("Details", "Trip", new { id = model.TripId });
                     }
 
-                    // Create booking
                     var booking = new Booking
                     {
                         UserId = userId!,
@@ -241,7 +236,6 @@ namespace TravelAgencyService.Controllers
                         UpdatedAt = DateTime.Now
                     };
 
-                    // Decrease available rooms
                     tripToUpdate.AvailableRooms -= model.NumberOfRooms;
                     tripToUpdate.TimesBooked++;
                     tripToUpdate.UpdatedAt = DateTime.Now;
@@ -250,7 +244,6 @@ namespace TravelAgencyService.Controllers
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
-                    // Redirect to payment
                     return RedirectToAction("Checkout", "Payment", new { bookingId = booking.BookingId });
                 }
                 catch
@@ -261,7 +254,6 @@ namespace TravelAgencyService.Controllers
                 }
             }
 
-            // If we got here, something went wrong - reload the view
             model.PackageName = trip.PackageName;
             model.Destination = trip.Destination;
             model.Country = trip.Country;
@@ -387,19 +379,16 @@ namespace TravelAgencyService.Controllers
 
             try
             {
-                // Update booking status
                 booking.Status = BookingStatus.Cancelled;
                 booking.CancellationDate = DateTime.Now;
                 booking.CancellationReason = model.CancellationReason;
                 booking.UpdatedAt = DateTime.Now;
 
-                // Return rooms to available pool
                 if (booking.Trip != null)
                 {
                     booking.Trip.AvailableRooms += booking.NumberOfRooms;
                     booking.Trip.UpdatedAt = DateTime.Now;
 
-                    // Check waiting list and notify first person
                     var firstInWaitingList = await _context.WaitingListEntries
                         .Include(w => w.User)
                         .Where(w => w.TripId == booking.TripId && w.Status == WaitingListStatus.Waiting)
@@ -412,8 +401,6 @@ namespace TravelAgencyService.Controllers
                         firstInWaitingList.IsNotified = true;
                         firstInWaitingList.NotificationDate = DateTime.Now;
                         firstInWaitingList.NotificationExpiresAt = DateTime.Now.AddHours(24);
-
-                        // TODO: Send email notification
                     }
                 }
 
@@ -422,7 +409,6 @@ namespace TravelAgencyService.Controllers
 
                 TempData["Success"] = "Your booking has been cancelled successfully.";
 
-                // If paid, show refund message
                 if (booking.IsPaid)
                 {
                     TempData["Success"] += " A refund will be processed within 5-7 business days.";
@@ -443,7 +429,6 @@ namespace TravelAgencyService.Controllers
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // Check if already on waiting list
             var existingEntry = await _context.WaitingListEntries
                 .FirstOrDefaultAsync(w => w.UserId == userId && w.TripId == id &&
                                           (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified));
@@ -495,7 +480,6 @@ namespace TravelAgencyService.Controllers
 
             if (ModelState.IsValid)
             {
-                // Get current max position
                 var maxPosition = await _context.WaitingListEntries
                     .Where(w => w.TripId == model.TripId)
                     .MaxAsync(w => (int?)w.Position) ?? 0;
@@ -521,7 +505,7 @@ namespace TravelAgencyService.Controllers
             return View(model);
         }
 
-        // GET: /Booking/DownloadItinerary/5
+        // GET: /Booking/DownloadItinerary/5 - PDF VERSION
         public async Task<IActionResult> DownloadItinerary(int id)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -542,74 +526,15 @@ namespace TravelAgencyService.Controllers
                 return RedirectToAction("MyBookings");
             }
 
-            // Mark itinerary as downloaded
+            // Mark as downloaded
             booking.ItineraryDownloaded = true;
             await _context.SaveChangesAsync();
 
-            // Generate a simple text itinerary (in a real app, you'd generate a PDF)
-            var itinerary = GenerateItineraryContent(booking);
-            var bytes = System.Text.Encoding.UTF8.GetBytes(itinerary);
-            var fileName = $"Itinerary_{booking.Trip.PackageName.Replace(" ", "_")}_{booking.BookingId}.txt";
+            // Generate PDF
+            var pdfBytes = _pdfService.GenerateItinerary(booking);
+            var fileName = $"Itinerary_{booking.Trip.PackageName.Replace(" ", "_")}_{booking.BookingId}.pdf";
 
-            return File(bytes, "text/plain", fileName);
-        }
-
-        private string GenerateItineraryContent(Booking booking)
-        {
-            var trip = booking.Trip!;
-            var user = booking.User!;
-
-            return $@"
-========================================
-        TRAVEL ITINERARY
-========================================
-
-BOOKING REFERENCE: #{booking.BookingId}
-BOOKING DATE: {booking.BookingDate:MMMM dd, yyyy}
-
-----------------------------------------
-TRAVELER INFORMATION
-----------------------------------------
-Name: {user.FirstName} {user.LastName}
-Email: {user.Email}
-
-----------------------------------------
-TRIP DETAILS
-----------------------------------------
-Package: {trip.PackageName}
-Destination: {trip.Destination}, {trip.Country}
-Duration: {trip.TripDurationDays} days
-
-Departure: {trip.StartDate:dddd, MMMM dd, yyyy}
-Return: {trip.EndDate:dddd, MMMM dd, yyyy}
-
-Rooms Booked: {booking.NumberOfRooms}
-Total Paid: ${booking.TotalPrice}
-
-----------------------------------------
-TRIP DESCRIPTION
-----------------------------------------
-{trip.Description}
-
-----------------------------------------
-IMPORTANT INFORMATION
-----------------------------------------
-- Please arrive at the airport at least 3 hours before departure
-- Bring valid passport and travel documents
-- Check local COVID-19 requirements
-- Travel insurance is recommended
-
-----------------------------------------
-CONTACT INFORMATION
-----------------------------------------
-Emergency Contact: +1-800-TRAVEL
-Email: support@travelagency.com
-
-Thank you for choosing Travel Agency!
-Have a wonderful trip!
-
-========================================
-";
+            return File(pdfBytes, "application/pdf", fileName);
         }
     }
 }

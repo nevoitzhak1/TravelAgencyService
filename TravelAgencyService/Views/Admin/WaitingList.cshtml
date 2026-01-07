@@ -1,8 +1,10 @@
-﻿@model TravelAgencyService.Models.ViewModels.WaitingListViewModel
+﻿@model TravelAgencyService.Models.ViewModels.AdminWaitingListViewModel
 
 @{
     ViewData["Title"] = "Waiting Lists";
-    var groupedEntries = Model.Entries.GroupBy(e => e.TripId);
+    var groupedEntries = Model.Entries
+        .GroupBy(e => e.TripId)
+        .OrderBy(g => g.Key);
 }
 
 <div class="container-fluid">
@@ -19,48 +21,75 @@
         </div>
     }
 
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
     <div class="card">
         <div class="card-body">
-            @if (Model.Entries.Any())
+            @if (Model.Entries != null && Model.Entries.Any())
             {
                 @foreach (var group in groupedEntries)
                 {
                     var tripName = group.First().TripName;
+                    var ordered = group.OrderBy(e => e.JoinedDate).ToList();
+
                     <div class="card mb-3">
                         <div class="card-header bg-light">
                             <h5 class="mb-0">
                                 <i class="bi bi-airplane"></i> @tripName
-                                <span class="badge bg-primary">@group.Count() waiting</span>
+                                <span class="badge bg-primary">@ordered.Count waiting</span>
                             </h5>
                         </div>
+
                         <div class="card-body">
                             <table class="table table-hover mb-0">
                                 <thead>
                                     <tr>
-                                        <th>Position</th>
+                                        <th>Position (FIFO)</th>
                                         <th>User</th>
                                         <th>Email</th>
                                         <th>Rooms Requested</th>
                                         <th>Joined</th>
                                         <th>Status</th>
+                                        <th>Notification</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach (var entry in group.OrderBy(e => e.Position))
+                                    @for (int i = 0; i < ordered.Count; i++)
                                     {
+                                        var entry = ordered[i];
+                                        var position = i + 1;
+
                                         <tr>
                                             <td>
-                                                <span class="badge bg-secondary fs-6">#@entry.Position</span>
+                                                <span class="badge bg-secondary fs-6">#@position</span>
                                             </td>
                                             <td><strong>@entry.UserName</strong></td>
                                             <td>@entry.UserEmail</td>
                                             <td>@entry.RoomsRequested</td>
-                                            <td>@entry.JoinedDate.ToString("MMM dd, yyyy")</td>
+                                            <td>@entry.JoinedDate.ToString("MMM dd, yyyy HH:mm")</td>
                                             <td>
-                                                @if (entry.IsNotified)
+                                                @if (entry.StatusText == "Notified")
                                                 {
                                                     <span class="badge bg-info">Notified</span>
+                                                }
+                                                else if (entry.StatusText == "Expired")
+                                                {
+                                                    <span class="badge bg-secondary">Expired</span>
+                                                }
+                                                else if (entry.StatusText == "Booked")
+                                                {
+                                                    <span class="badge bg-success">Booked</span>
+                                                }
+                                                else if (entry.StatusText == "Cancelled")
+                                                {
+                                                    <span class="badge bg-dark">Cancelled</span>
                                                 }
                                                 else
                                                 {
@@ -68,21 +97,35 @@
                                                 }
                                             </td>
                                             <td>
-                                                @if (!entry.IsNotified)
+                                                @if (entry.IsNotified)
                                                 {
-                                                    <form asp-action="NotifyWaitingUser" asp-route-id="@entry.WaitingListEntryId"
+                                                    <div class="small text-muted">
+                                                        <div><b>Sent:</b> @(entry.NotificationDate?.ToString("MMM dd, yyyy HH:mm") ?? "-")</div>
+                                                        <div><b>Expires:</b> @(entry.NotificationExpiresAt?.ToString("MMM dd, yyyy HH:mm") ?? "-")</div>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted small">—</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (position == 1 && entry.CanNotify)
+                                                {
+                                                    <form asp-action="NotifyWaitingUser"
+                                                          asp-route-id="@entry.WaitingListEntryId"
                                                           method="post" class="d-inline">
                                                         @Html.AntiForgeryToken()
                                                         <button type="submit" class="btn btn-sm btn-primary"
-                                                                title="Notify user that a room is available">
-                                                            <i class="bi bi-bell"></i> Notify
+                                                                title="Notify FIRST user in FIFO queue">
+                                                            <i class="bi bi-bell"></i> Notify #1
                                                         </button>
                                                     </form>
                                                 }
                                                 else
                                                 {
-                                                    <span class="text-muted">
-                                                        <i class="bi bi-check-circle"></i> Notified
+                                                    <span class="text-muted small">
+                                                        @(entry.IsNotified ? "Already notified" : "Only FIFO #1 can be notified")
                                                     </span>
                                                 }
                                             </td>
