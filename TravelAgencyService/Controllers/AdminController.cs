@@ -184,6 +184,25 @@ namespace TravelAgencyService.Controllers
 
                 _context.Trips.Add(trip);
                 await _context.SaveChangesAsync();
+                if (model.ReminderRules != null && model.ReminderRules.Any())
+                {
+                    var rules = model.ReminderRules
+                        .Where(r => r.OffsetAmount > 0 && r.IsActive)
+                        .Select(r => new TripReminderRule
+                        {
+                            TripId = trip.TripId,
+                            OffsetAmount = r.OffsetAmount,
+                            OffsetUnit = r.OffsetUnit,
+                            IsActive = true
+                        })
+                        .ToList();
+
+                    if (rules.Any())
+                    {
+                        _context.TripReminderRules.AddRange(rules);
+                        await _context.SaveChangesAsync();
+                    }
+                }
 
                 TempData["Success"] = $"Trip '{trip.PackageName}' created successfully!";
                 return RedirectToAction(nameof(ManageTrips));
@@ -226,6 +245,17 @@ namespace TravelAgencyService.Controllers
                 TimesBooked = trip.TimesBooked,
                 CreatedAt = trip.CreatedAt
             };
+            model.ReminderRules = await _context.TripReminderRules
+                 .Where(r => r.TripId == id && r.IsActive)
+                 .OrderBy(r => r.OffsetUnit).ThenBy(r => r.OffsetAmount)
+                 .Select(r => new ReminderRuleInput
+                 {
+                    TripReminderRuleId = r.TripReminderRuleId,
+                    OffsetAmount = r.OffsetAmount,
+                    OffsetUnit = r.OffsetUnit,
+                    IsActive = r.IsActive
+                })
+                 .ToListAsync();
 
             return View(model);
         }
@@ -275,6 +305,50 @@ namespace TravelAgencyService.Controllers
                 await _context.SaveChangesAsync();
 
                 TempData["Success"] = $"Trip '{trip.PackageName}' updated successfully!";
+                // Deactivate all existing rules for this trip (keeps send logs intact)
+                var existing = await _context.TripReminderRules.Where(r => r.TripId == id).ToListAsync();
+                foreach (var r in existing) r.IsActive = false;
+
+                // Re-activate/update or add new ones
+                if (model.ReminderRules != null)
+                {
+                    foreach (var input in model.ReminderRules.Where(x => x.OffsetAmount > 0 && x.IsActive))
+                    {
+                        if (input.TripReminderRuleId.HasValue)
+                        {
+                            var rule = existing.FirstOrDefault(x => x.TripReminderRuleId == input.TripReminderRuleId.Value);
+                            if (rule != null)
+                            {
+                                rule.OffsetAmount = input.OffsetAmount;
+                                rule.OffsetUnit = input.OffsetUnit;
+                                rule.IsActive = true;
+                            }
+                            else
+                            {
+                                _context.TripReminderRules.Add(new TripReminderRule
+                                {
+                                    TripId = id,
+                                    OffsetAmount = input.OffsetAmount,
+                                    OffsetUnit = input.OffsetUnit,
+                                    IsActive = true
+                                });
+                            }
+                        }
+                        else
+                        {
+                            _context.TripReminderRules.Add(new TripReminderRule
+                            {
+                                TripId = id,
+                                OffsetAmount = input.OffsetAmount,
+                                OffsetUnit = input.OffsetUnit,
+                                IsActive = true
+                            });
+                        }
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+
                 return RedirectToAction(nameof(ManageTrips));
             }
 

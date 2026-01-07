@@ -3,6 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using TravelAgencyService.Data;
 using TravelAgencyService.Middleware;
 using TravelAgencyService.Models;
+using TravelAgencyService.Services.Background;
+using TravelAgencyService.Services.Email;
+
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,6 +34,9 @@ builder.Services.AddDefaultIdentity<ApplicationUser>(options =>
 builder.Services.AddControllersWithViews();
 builder.Services.AddScoped<TravelAgencyService.Services.PdfService>();
 builder.Services.AddRazorPages();
+builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("Email"));
+builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+builder.Services.AddHostedService<TripReminderWorker>();
 
 var app = builder.Build();
 
