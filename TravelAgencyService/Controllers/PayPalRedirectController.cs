@@ -1,6 +1,9 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Linq;
+using System.Collections.Generic;
 using System.Security.Claims;
 using TravelAgencyService.Data;
 using TravelAgencyService.Models;
@@ -39,7 +42,6 @@ public class PayPalRedirectController : Controller
             return RedirectToAction("Index", "Cart");
         }
 
-        // בודק זמינות + מחשב סכום מהשרת (לא סומכים על הלקוח)
         decimal total = 0m;
         foreach (var item in cartItems)
         {
@@ -53,7 +55,6 @@ public class PayPalRedirectController : Controller
             total += trip.Price * item.NumberOfRooms;
         }
 
-        // יוצר Bookings במצב Pending (לא שורף מלאי עדיין!)
         using var tx = await _context.Database.BeginTransactionAsync(ct);
         var bookingIds = new List<int>();
 
@@ -94,20 +95,77 @@ public class PayPalRedirectController : Controller
             return RedirectToAction("Checkout", "Cart");
         }
 
-        // מחזירים ids ב-query (ללא שינוי DB)
         var bookingIdsCsv = string.Join(",", bookingIds);
 
-        var returnUrl = Url.Action("Return", "PayPalRedirect", new { bookingIds = bookingIdsCsv }, Request.Scheme)!;
-        var cancelUrl = Url.Action("Cancel", "PayPalRedirect", new { bookingIds = bookingIdsCsv }, Request.Scheme)!;
+        var returnUrl = Url.Action("Return", "PayPalRedirect", new { bookingIds = bookingIdsCsv, source = "cart" }, Request.Scheme)!;
+        var cancelUrl = Url.Action("Cancel", "PayPalRedirect", new { bookingIds = bookingIdsCsv, source = "cart" }, Request.Scheme)!;
 
         var currency = "USD";
         var (_, approveUrl) = await _pp.CreateOrderAndGetApproveUrlAsync(total, currency, returnUrl, cancelUrl, ct);
 
-        return Redirect(approveUrl); // ✅ Redirect אמיתי ל-PayPal
+        return Redirect(approveUrl);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> StartSingle(int tripId, int rooms, CancellationToken ct)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId))
+            return RedirectToAction("Login", "Account");
+
+        var trip = await _context.Trips.FindAsync(new object[] { tripId }, ct);
+        if (trip == null || !trip.IsVisible || trip.StartDate <= DateTime.Now || rooms < 1 || trip.AvailableRooms < rooms)
+        {
+            TempData["Error"] = "Trip is not available.";
+            return RedirectToAction("Details", "Trip", new { id = tripId });
+        }
+
+        using var tx = await _context.Database.BeginTransactionAsync(ct);
+        try
+        {
+            var booking = new Booking
+            {
+                UserId = userId!,
+                TripId = tripId,
+                NumberOfRooms = rooms,
+                TotalPrice = trip.Price * rooms,
+                BookingDate = DateTime.Now,
+                Status = BookingStatus.Pending,
+                IsPaid = false,
+                PaymentDate = null,
+                CardLastFourDigits = null,
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
+
+            _context.Bookings.Add(booking);
+            await _context.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+
+            var bookingIdsCsv = booking.BookingId.ToString();
+
+            var returnUrl = Url.Action("Return", "PayPalRedirect",
+                new { bookingIds = bookingIdsCsv, source = "single" }, Request.Scheme)!;
+
+            var cancelUrl = Url.Action("Cancel", "PayPalRedirect",
+                new { bookingIds = bookingIdsCsv, source = "single" }, Request.Scheme)!;
+
+            var currency = "USD";
+            var (_, approveUrl) = await _pp.CreateOrderAndGetApproveUrlAsync(booking.TotalPrice, currency, returnUrl, cancelUrl, ct);
+
+            return Redirect(approveUrl);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            TempData["Error"] = "Could not start PayPal payment.";
+            return RedirectToAction("Checkout", "Cart", new { tripId, rooms });
+        }
     }
 
     [HttpGet]
-    public async Task<IActionResult> Return(string bookingIds, string token, CancellationToken ct)
+    public async Task<IActionResult> Return(string bookingIds, string? token, CancellationToken ct, string source = "cart")
     {
         if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(bookingIds))
             return BadRequest("Missing parameters.");
@@ -148,7 +206,6 @@ public class PayPalRedirectController : Controller
                 if (trip == null || trip.AvailableRooms < b.NumberOfRooms)
                     throw new Exception("Trip availability changed.");
 
-                // עכשיו שורפים מלאי
                 trip.AvailableRooms -= b.NumberOfRooms;
                 trip.TimesBooked++;
                 trip.UpdatedAt = DateTime.Now;
@@ -159,13 +216,22 @@ public class PayPalRedirectController : Controller
                 b.UpdatedAt = DateTime.Now;
             }
 
-            var cartItems = await _context.CartItems.Where(c => c.UserId == userId).ToListAsync(ct);
-            _context.CartItems.RemoveRange(cartItems);
+            if (source == "cart")
+            {
+                var cartItems = await _context.CartItems.Where(c => c.UserId == userId).ToListAsync(ct);
+                _context.CartItems.RemoveRange(cartItems);
+            }
 
             await _context.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
 
             TempData["Success"] = $"PayPal payment successful! {bookings.Count} booking(s) confirmed.";
+
+            if (source == "single" && bookings.Count == 1)
+            {
+                return RedirectToAction("Confirmation", "Booking", new { id = bookings[0].BookingId });
+            }
+
             return RedirectToAction("Index", "Home");
         }
         catch
@@ -177,11 +243,10 @@ public class PayPalRedirectController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> Cancel(string bookingIds, CancellationToken ct)
+    public async Task<IActionResult> Cancel(string bookingIds, CancellationToken ct, string source = "cart")
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        // מוחקים את ה-Pending שנוצרו
         if (!string.IsNullOrWhiteSpace(userId) && !string.IsNullOrWhiteSpace(bookingIds))
         {
             var ids = bookingIds.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).ToList();

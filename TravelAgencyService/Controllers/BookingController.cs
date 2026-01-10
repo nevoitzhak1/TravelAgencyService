@@ -245,7 +245,7 @@ namespace TravelAgencyService.Controllers
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
-                    return RedirectToAction("Checkout", "Payment", new { bookingId = booking.BookingId });
+                    return RedirectToAction("Checkout", "Cart", new { tripId = model.TripId, rooms = model.NumberOfRooms });
                 }
                 catch
                 {

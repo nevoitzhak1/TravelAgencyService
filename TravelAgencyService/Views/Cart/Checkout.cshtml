@@ -78,6 +78,12 @@
                         </div>
 
                         <hr />
+                        @if (Model.IsSingleCheckout)
+                        {
+                            <input type="hidden" asp-for="IsSingleCheckout" />
+                            <input type="hidden" asp-for="SingleTripId" />
+                            <input type="hidden" asp-for="SingleRooms" />
+                        }
 
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <span class="fs-5">Total to Pay:</span>
@@ -94,19 +100,24 @@
                         <span class="text-muted">or</span>
                     </div>
 
-                    <form asp-controller="PayPalRedirect" asp-action="StartFromCart" method="post">
+                    <form asp-controller="PayPalRedirect"
+                          asp-action="@(Model.IsSingleCheckout ? "StartSingle" : "StartFromCart")"
+                          method="post">
                         @Html.AntiForgeryToken()
+
+                        @if (Model.IsSingleCheckout)
+                        {
+                            <input type="hidden" name="tripId" value="@Model.SingleTripId" />
+                            <input type="hidden" name="rooms" value="@Model.SingleRooms" />
+                        }
 
                         <div class="d-grid">
                             <button type="submit" class="btn btn-warning btn-lg">
                                 <i class="bi bi-paypal"></i> Pay with PayPal
                             </button>
                         </div>
-
-                        <small class="text-muted d-block mt-2">
-                            You will be redirected to PayPal to complete the payment.
-                        </small>
                     </form>
+
 
                 </div>
             </div>

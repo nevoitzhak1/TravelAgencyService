@@ -141,111 +141,114 @@
                     {
                         <div class="col">
                             <div class="card h-100 shadow-sm trip-card">
-                                <!-- Trip Image -->
-                                <div class="position-relative">
-                                    @if (!string.IsNullOrEmpty(trip.MainImageUrl))
-                                    {
-                                        <img src="@trip.MainImageUrl" class="card-img-top" alt="@trip.PackageName"
-                                             style="height: 200px; object-fit: cover;">
-                                    }
-                                    else
-                                    {
-                                        <div class="bg-secondary text-white d-flex align-items-center justify-content-center"
-                                             style="height: 200px;">
-                                            <i class="bi bi-image fs-1"></i>
-                                        </div>
-                                    }
 
-                                    <!-- Badges -->
-                                    @if (trip.IsOnSale)
-                                    {
-                                        <span class="position-absolute top-0 start-0 badge bg-danger m-2">
-                                            <i class="bi bi-tag"></i> @($"{trip.DiscountPercentage:0}% OFF")
-                                        </span>
-                                        <span class="position-absolute top-0 end-0 badge bg-danger m-2">
-                                            <i class="bi bi-currency-dollar"></i>
-                                            Order NOW and Save: $@(trip.OriginalPrice - trip.Price)
-                                        </span>
-                                    }
-                                    @if (trip.IsFullyBooked)
-                                    {
-                                        <span class="position-absolute top-0 end-0 badge bg-dark m-2">
-                                            Fully Booked
-                                        </span>
-                                    }
-                                    <span class="position-absolute bottom-0 start-0 badge bg-primary m-2">
-                                        @trip.PackageType
-                                    </span>
-                                </div>
+                                <!-- ✅ CLICKABLE AREA (image + body) -->
+                                <a asp-action="Details"
+                                   asp-route-id="@trip.TripId"
+                                   class="trip-card-link text-decoration-none text-reset d-block">
 
-                                <div class="card-body">
-                                    <h5 class="card-title">@trip.PackageName</h5>
-                                    <p class="card-text text-muted mb-1">
-                                        <i class="bi bi-geo-alt"></i> @trip.Destination, @trip.Country
-                                    </p>
-                                    <p class="card-text text-muted mb-2">
-                                        <i class="bi bi-calendar"></i>
-                                        @trip.StartDate.ToString("MMM dd") - @trip.EndDate.ToString("MMM dd, yyyy")
-                                        <span class="text-primary">(@trip.TripDurationDays days)</span>
-                                    </p>
-
-                                    <!-- Rating -->
-                                    <div class="mb-2">
-                                        @for (int i = 1; i <= 5; i++)
+                                    <!-- Trip Image -->
+                                    <div class="position-relative">
+                                        @if (!string.IsNullOrEmpty(trip.MainImageUrl))
                                         {
-                                            if (i <= trip.AverageRating)
+                                            <img src="@trip.MainImageUrl" class="card-img-top" alt="@trip.PackageName"
+                                                 style="height: 200px; object-fit: cover;">
+                                        }
+                                        else
+                                        {
+                                            <div class="bg-secondary text-white d-flex align-items-center justify-content-center"
+                                                 style="height: 200px;">
+                                                <i class="bi bi-image fs-1"></i>
+                                            </div>
+                                        }
+
+                                        <!-- Badges -->
+                                        @if (trip.IsOnSale)
+                                        {
+                                            <span class="position-absolute top-0 start-0 badge bg-danger m-2">
+                                                <i class="bi bi-tag"></i> @($"{trip.DiscountPercentage:0}% OFF")
+                                            </span>
+                                            <span class="position-absolute top-0 end-0 badge bg-danger m-2">
+                                                <i class="bi bi-currency-dollar"></i>
+                                                Order NOW and Save: $@(trip.OriginalPrice - trip.Price)
+                                            </span>
+                                        }
+                                        @if (trip.IsFullyBooked)
+                                        {
+                                            <span class="position-absolute top-0 end-0 badge bg-dark m-2">
+                                                Fully Booked
+                                            </span>
+                                        }
+                                        <span class="position-absolute bottom-0 start-0 badge bg-primary m-2">
+                                            @trip.PackageType
+                                        </span>
+                                    </div>
+
+                                    <div class="card-body">
+                                        <h5 class="card-title">@trip.PackageName</h5>
+                                        <p class="card-text text-muted mb-1">
+                                            <i class="bi bi-geo-alt"></i> @trip.Destination, @trip.Country
+                                        </p>
+                                        <p class="card-text text-muted mb-2">
+                                            <i class="bi bi-calendar"></i>
+                                            @trip.StartDate.ToString("MMM dd") - @trip.EndDate.ToString("MMM dd, yyyy")
+                                            <span class="text-primary">(@trip.TripDurationDays days)</span>
+                                        </p>
+
+                                        <!-- Rating -->
+                                        <div class="mb-2">
+                                            @for (int i = 1; i <= 5; i++)
                                             {
-                                                <i class="bi bi-star-fill text-warning"></i>
+                                                if (i <= trip.AverageRating)
+                                                {
+                                                    <i class="bi bi-star-fill text-warning"></i>
+                                                }
+                                                else if (i - 0.5 <= trip.AverageRating)
+                                                {
+                                                    <i class="bi bi-star-half text-warning"></i>
+                                                }
+                                                else
+                                                {
+                                                    <i class="bi bi-star text-warning"></i>
+                                                }
                                             }
-                                            else if (i - 0.5 <= trip.AverageRating)
+                                            <small class="text-muted">(@trip.ReviewCount reviews)</small>
+                                        </div>
+
+                                        <!-- Price -->
+                                        <div class="mb-2">
+                                            @if (trip.IsOnSale)
                                             {
-                                                <i class="bi bi-star-half text-warning"></i>
+                                                <span class="text-decoration-line-through text-muted">$@trip.OriginalPrice</span>
+                                                <span class="fs-4 fw-bold text-danger">$@trip.Price</span>
                                             }
                                             else
                                             {
-                                                <i class="bi bi-star text-warning"></i>
+                                                <span class="fs-4 fw-bold text-primary">$@trip.Price</span>
                                             }
-                                        }
-                                        <small class="text-muted">(@trip.ReviewCount reviews)</small>
-                                    </div>
+                                            <small class="text-muted">/ person</small>
+                                        </div>
 
-                                    <!-- Price -->
-                                    <div class="mb-2">
-                                        @if (trip.IsOnSale)
-                                        {
-                                            <span class="text-decoration-line-through text-muted">$@trip.OriginalPrice</span>
-                                            <span class="fs-4 fw-bold text-danger">$@trip.Price</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="fs-4 fw-bold text-primary">$@trip.Price</span>
-                                        }
-                                        <small class="text-muted">/ person</small>
+                                        <!-- Availability -->
+                                        <p class="mb-0">
+                                            @if (trip.IsFullyBooked)
+                                            {
+                                                <span class="text-danger"><i class="bi bi-x-circle"></i> No rooms available</span>
+                                            }
+                                            else if (trip.AvailableRooms <= 3)
+                                            {
+                                                <span class="text-warning"><i class="bi bi-exclamation-circle"></i> Only @trip.AvailableRooms rooms left!</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-success"><i class="bi bi-check-circle"></i> @trip.AvailableRooms rooms available</span>
+                                            }
+                                        </p>
                                     </div>
-
-                                    <!-- Availability -->
-                                    <p class="mb-0">
-                                        @if (trip.IsFullyBooked)
-                                        {
-                                            <span class="text-danger"><i class="bi bi-x-circle"></i> No rooms available</span>
-                                        }
-                                        else if (trip.AvailableRooms <= 3)
-                                        {
-                                            <span class="text-warning"><i class="bi bi-exclamation-circle"></i> Only @trip.AvailableRooms rooms left!</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-success"><i class="bi bi-check-circle"></i> @trip.AvailableRooms rooms available</span>
-                                        }
-                                    </p>
-                                </div>
+                                </a>
 
                                 <div class="card-footer bg-white">
                                     <div class="d-grid gap-2">
-                                        <a asp-action="Details" asp-route-id="@trip.TripId" class="btn btn-outline-primary">
-                                            <i class="bi bi-eye"></i> View Details
-                                        </a>
-                                        
                                         @if (!trip.IsFullyBooked)
                                         {
                                             <div class="btn-group w-100">
@@ -357,4 +360,9 @@
         transform: translateY(-5px);
         box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
     }
+
+    .trip-card-link {
+        cursor: pointer;
+    }
+
 </style>

@@ -169,10 +169,56 @@ namespace TravelAgencyService.Controllers
             return RedirectToAction("Index");
         }
 
-        public async Task<IActionResult> Checkout()
+        public async Task<IActionResult> Checkout(int? tripId = null, int rooms = 1)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (tripId.HasValue)
+            {
+                var trip = await _context.Trips.FirstOrDefaultAsync(t => t.TripId == tripId.Value);
+                if (trip == null || !trip.IsVisible)
+                {
+                    TempData["Error"] = "Trip not found.";
+                    return RedirectToAction("Index", "Trip");
+                }
 
+                if (rooms < 1) rooms = 1;
+
+                var model = new CartCheckoutViewModel
+                {
+                    IsSingleCheckout = true,
+                    SingleTripId = trip.TripId,
+                    SingleRooms = rooms,
+                    Items = new List<CartItemViewModel>
+            {
+                new CartItemViewModel
+                {
+                    TripId = trip.TripId,
+                    PackageName = trip.PackageName,
+                    Destination = trip.Destination,
+                    Country = trip.Country,
+                    StartDate = trip.StartDate,
+                    EndDate = trip.EndDate,
+                    PricePerPerson = trip.Price,
+                    OriginalPrice = trip.OriginalPrice,
+                    IsOnSale = trip.IsOnSale,
+                    NumberOfRooms = rooms,
+                    MainImageUrl = trip.MainImageUrl,
+                    AvailableRooms = trip.AvailableRooms,
+                    IsStillAvailable = trip.AvailableRooms >= rooms && trip.StartDate > DateTime.Now
+                }
+            }
+                };
+
+                if (!model.Items[0].IsStillAvailable)
+                {
+                    TempData["Error"] = "Sorry, this trip is no longer available.";
+                    return RedirectToAction("Details", "Trip", new { id = trip.TripId });
+                }
+
+                return View(model); // ✅ Views/Cart/Checkout.cshtml
+            }
+
+            // ✅ Cart mode (existing logic)
             var cartItems = await _context.CartItems
                 .Include(c => c.Trip)
                 .Where(c => c.UserId == userId)
@@ -232,7 +278,88 @@ namespace TravelAgencyService.Controllers
         public async Task<IActionResult> Checkout(CartCheckoutViewModel model)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (model.IsSingleCheckout && model.SingleTripId.HasValue && model.SingleRooms.HasValue)
+            {
+                var trip = await _context.Trips.FindAsync(model.SingleTripId.Value);
+                if (trip == null || !trip.IsVisible)
+                {
+                    TempData["Error"] = "Trip not found.";
+                    return RedirectToAction("Index", "Trip");
+                }
 
+                if (trip.AvailableRooms < model.SingleRooms.Value)
+                {
+                    TempData["Error"] = "Sorry, the rooms are no longer available.";
+                    return RedirectToAction("Details", "Trip", new { id = trip.TripId });
+                }
+
+                // validations existing in your method: expiry, CVV, etc... keep them
+                // if ModelState invalid -> rebuild model.Items and return View(model)
+
+                if (!ModelState.IsValid)
+                {
+                    model.Items = new List<CartItemViewModel>
+            {
+                new CartItemViewModel
+                {
+                    TripId = trip.TripId,
+                    PackageName = trip.PackageName,
+                    Destination = trip.Destination,
+                    Country = trip.Country,
+                    StartDate = trip.StartDate,
+                    EndDate = trip.EndDate,
+                    PricePerPerson = trip.Price,
+                    OriginalPrice = trip.OriginalPrice,
+                    IsOnSale = trip.IsOnSale,
+                    NumberOfRooms = model.SingleRooms.Value,
+                    MainImageUrl = trip.MainImageUrl,
+                    AvailableRooms = trip.AvailableRooms,
+                    IsStillAvailable = trip.AvailableRooms >= model.SingleRooms.Value && trip.StartDate > DateTime.Now
+                }
+            };
+                    return View(model);
+                }
+
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    // burn inventory + create booking paid (same style as your cart flow)
+                    trip.AvailableRooms -= model.SingleRooms.Value;
+                    trip.UpdatedAt = DateTime.Now;
+
+                    var cardLastFour = model.CardNumber.Length >= 4
+                        ? model.CardNumber.Substring(model.CardNumber.Length - 4)
+                        : model.CardNumber;
+
+                    var booking = new Booking
+                    {
+                        UserId = userId!,
+                        TripId = trip.TripId,
+                        NumberOfRooms = model.SingleRooms.Value,
+                        TotalPrice = trip.Price * model.SingleRooms.Value,
+                        BookingDate = DateTime.Now,
+                        Status = BookingStatus.Confirmed,
+                        IsPaid = true,
+                        PaymentDate = DateTime.Now,
+                        CardLastFourDigits = cardLastFour,
+                        CreatedAt = DateTime.Now,
+                        UpdatedAt = DateTime.Now
+                    };
+
+                    _context.Bookings.Add(booking);
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    TempData["Success"] = "✅ Payment successful! Your booking is confirmed.";
+                    return RedirectToAction("Confirmation", "Booking", new { id = booking.BookingId });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    TempData["Error"] = "Payment failed. Please try again.";
+                    return RedirectToAction("Checkout", new { tripId = model.SingleTripId, rooms = model.SingleRooms });
+                }
+            }
             var cartItems = await _context.CartItems
                 .Include(c => c.Trip)
                 .Where(c => c.UserId == userId)
@@ -387,7 +514,7 @@ namespace TravelAgencyService.Controllers
                 NumberOfRooms = Math.Min(rooms, trip.AvailableRooms)
             };
 
-            return View(viewModel);
+            return RedirectToAction("Checkout", "Cart", new { tripId = id, rooms });
         }
 
         [HttpPost]
