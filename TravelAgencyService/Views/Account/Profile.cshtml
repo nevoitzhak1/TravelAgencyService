@@ -4,443 +4,696 @@
 }
 
 <style>
-    .profile-header {
-        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #1e3c72 100%);
-        border-radius: 20px;
-        padding: 40px;
-        color: white;
-        position: relative;
-        overflow: hidden;
-        margin-bottom: 30px;
+    /* ===== BASE ===== */
+    .profile-page {
+        background: #f8fafc;
+        min-height: calc(100vh - 56px);
     }
 
-        .profile-header::before {
+    /* ===== HERO SECTION ===== */
+    .profile-hero {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        padding: 48px 0;
+        position: relative;
+        overflow: hidden;
+    }
+
+        .profile-hero::before {
             content: '';
             position: absolute;
-            top: -50%;
-            right: -50%;
-            width: 100%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            inset: 0;
+            background: radial-gradient(ellipse at 20% 50%, rgba(26, 115, 232, 0.15) 0%, transparent 50%), radial-gradient(ellipse at 80% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%);
             pointer-events: none;
         }
 
-    .profile-avatar {
-        width: 120px;
-        height: 120px;
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        border-radius: 50%;
+    .hero-inner {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 24px;
+    }
+
+    .hero-left {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+    }
+
+    /* ===== AVATAR ===== */
+    .avatar-box {
+        width: 96px;
+        height: 96px;
+        background: #1a73e8;
+        border-radius: 20px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 48px;
-        font-weight: bold;
-        color: white;
-        border: 4px solid rgba(255,255,255,0.3);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-    }
-
-    .profile-name {
-        font-size: 2rem;
+        font-size: 32px;
         font-weight: 700;
-        margin-bottom: 5px;
+        color: white;
+        letter-spacing: -1px;
+        box-shadow: 0 8px 32px rgba(26, 115, 232, 0.4);
+        flex-shrink: 0;
     }
 
-    .profile-email {
-        opacity: 0.85;
-        font-size: 1.1rem;
+    /* ===== USER INFO ===== */
+    .user-info h1 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: white;
+        margin: 0 0 6px 0;
+        letter-spacing: -0.5px;
     }
 
-    .member-badge {
-        background: rgba(255,255,255,0.2);
-        padding: 8px 16px;
-        border-radius: 20px;
+    .user-info .email {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 0.95rem;
+        margin: 0 0 12px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+        .user-info .email i {
+            font-size: 0.85rem;
+        }
+
+    .user-meta-row {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        flex-wrap: wrap;
+    }
+
+    .meta-tag {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 0.85rem;
+    }
+
+        .meta-tag i {
+            color: #60a5fa;
+        }
+
+    /* ===== EDIT BUTTON ===== */
+    .btn-edit-profile {
+        background: white;
+        color: #0f172a;
+        padding: 12px 24px;
+        border-radius: 12px;
+        font-weight: 600;
         font-size: 0.9rem;
+        text-decoration: none;
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        margin-top: 15px;
+        transition: all 0.2s;
+        border: none;
     }
 
-    .stat-card {
-        background: white;
-        border-radius: 16px;
-        padding: 25px;
-        text-align: center;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
-        border: 1px solid rgba(0,0,0,0.05);
-    }
-
-        .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+        .btn-edit-profile:hover {
+            background: #1a73e8;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(26, 115, 232, 0.4);
         }
 
-    .stat-icon {
-        width: 60px;
-        height: 60px;
+    /* ===== GLOBE LOGO ===== */
+    .globe-logo {
+        position: absolute;
+        right: 8%;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+    }
+
+    .globe-container {
+        position: relative;
+        width: 200px;
+        height: 200px;
+    }
+
+    .globe-circle {
+        width: 160px;
+        height: 160px;
+        border: 3px solid rgba(255, 255, 255, 0.15);
         border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin: 0 auto 15px;
-        font-size: 24px;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
     }
 
-        .stat-icon.bookings {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+        .globe-circle::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.15);
+            transform: translateY(-50%);
         }
 
-        .stat-icon.completed {
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            color: white;
+        .globe-circle::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: rgba(255, 255, 255, 0.15);
+            transform: translateX(-50%);
         }
 
-        .stat-icon.upcoming {
-            background: linear-gradient(135deg, #fc4a1a 0%, #f7b733 100%);
-            color: white;
-        }
-
-        .stat-icon.reviews {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            color: white;
-        }
-
-    .stat-number {
-        font-size: 2.5rem;
-        font-weight: 700;
-        color: #1e3c72;
-        line-height: 1;
+    .globe-ellipse {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 80px;
+        height: 140px;
+        border: 2px solid rgba(255, 255, 255, 0.12);
+        border-radius: 50%;
     }
 
-    .stat-label {
-        color: #6c757d;
-        font-size: 0.95rem;
-        margin-top: 5px;
+    .orbit-line {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 200px;
+        height: 200px;
+        border: 2px dashed rgba(26, 115, 232, 0.3);
+        border-radius: 50%;
+        transform: translate(-50%, -50%) rotate(-25deg);
     }
 
+    .globe-plane {
+        position: absolute;
+        top: 8px;
+        right: 20px;
+        font-size: 36px;
+        color: #1a73e8;
+        transform: rotate(-35deg);
+        filter: drop-shadow(0 4px 8px rgba(26, 115, 232, 0.5));
+        animation: fly 4s ease-in-out infinite;
+    }
+
+    @@keyframes fly {
+        0%, 100% {
+            transform: rotate(-35deg) translateY(0);
+        }
+
+        50% {
+            transform: rotate(-35deg) translateY(-8px);
+        }
+    }
+
+    /* ===== CONTENT SECTION ===== */
+    .content-section {
+        padding: 40px 0 60px;
+    }
+
+    .content-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+    }
+
+    @@media (max-width: 992px) {
+        .content-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .globe-logo {
+            display: none;
+        }
+    }
+
+    /* ===== INFO CARD ===== */
     .info-card {
         background: white;
         border-radius: 16px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-        border: 1px solid rgba(0,0,0,0.05);
+        border: 1px solid #e2e8f0;
         overflow: hidden;
     }
 
     .info-card-header {
-        background: #f8f9fa;
-        padding: 20px 25px;
-        border-bottom: 1px solid rgba(0,0,0,0.05);
+        padding: 20px 24px;
+        border-bottom: 1px solid #f1f5f9;
         display: flex;
         justify-content: space-between;
         align-items: center;
     }
 
-        .info-card-header h5 {
+        .info-card-header h3 {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #0f172a;
             margin: 0;
-            font-weight: 600;
-            color: #1e3c72;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
+            .info-card-header h3 i {
+                color: #1a73e8;
+            }
+
+    .btn-card {
+        background: #1a73e8;
+        color: white;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.2s;
+    }
+
+        .btn-card:hover {
+            background: #1557b0;
+            color: white;
+        }
+
+        .btn-card.red {
+            background: #ef4444;
+        }
+
+            .btn-card.red:hover {
+                background: #dc2626;
+            }
+
     .info-card-body {
-        padding: 25px;
+        padding: 0;
     }
 
     .info-row {
         display: flex;
-        padding: 15px 0;
-        border-bottom: 1px solid #f0f0f0;
+        align-items: center;
+        padding: 18px 24px;
+        border-bottom: 1px solid #f8fafc;
     }
 
         .info-row:last-child {
             border-bottom: none;
         }
 
-    .info-label {
-        width: 140px;
-        color: #6c757d;
+        .info-row:hover {
+            background: #f8fafc;
+        }
+
+    .info-row-icon {
+        width: 40px;
+        height: 40px;
+        background: #f1f5f9;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #64748b;
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+
+    .info-row-content {
+        margin-left: 16px;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .info-row-label {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 600;
+        margin-bottom: 2px;
+    }
+
+    .info-row-value {
+        font-size: 0.95rem;
+        color: #0f172a;
         font-weight: 500;
+    }
+
+        .info-row-value .muted {
+            color: #94a3b8;
+        }
+
+    .age-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: #dbeafe;
+        color: #1e40af;
+        padding: 3px 10px;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        margin-left: 10px;
+    }
+
+    .status-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #dcfce7;
+        color: #166534;
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+        .status-chip .dot {
+            width: 6px;
+            height: 6px;
+            background: #22c55e;
+            border-radius: 50%;
+        }
+
+    .warning-row {
+        color: #dc2626;
+        font-size: 0.85rem;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    /* ===== QUICK ACTIONS ===== */
+    .actions-section {
+        margin-top: 32px;
+    }
+
+    .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin: 0 0 16px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+        .section-title i {
+            color: #1a73e8;
+        }
+
+    .actions-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+    }
+
+    @@media (max-width: 768px) {
+        .actions-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    .action-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 24px 16px;
+        text-decoration: none;
+        text-align: center;
+        transition: all 0.2s;
+    }
+
+        .action-card:hover {
+            border-color: #1a73e8;
+            box-shadow: 0 8px 24px rgba(26, 115, 232, 0.12);
+            transform: translateY(-4px);
+        }
+
+            .action-card:hover .action-icon {
+                transform: scale(1.1);
+            }
+
+    .action-icon {
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+        margin: 0 auto 12px;
+        transition: transform 0.2s;
+    }
+
+        .action-icon.blue {
+            background: #dbeafe;
+            color: #1a73e8;
+        }
+
+        .action-icon.green {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+
+        .action-icon.orange {
+            background: #ffedd5;
+            color: #ea580c;
+        }
+
+        .action-icon.purple {
+            background: #f3e8ff;
+            color: #9333ea;
+        }
+
+    .action-label {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #0f172a;
+    }
+
+    /* ===== ALERT ===== */
+    .success-alert {
+        background: #dcfce7;
+        border: 1px solid #bbf7d0;
+        border-radius: 12px;
+        padding: 14px 20px;
+        margin-bottom: 24px;
         display: flex;
         align-items: center;
         gap: 10px;
-    }
-
-    .info-value {
-        flex: 1;
-        color: #333;
+        color: #166534;
         font-weight: 500;
     }
 
-    .btn-edit {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border: none;
-        padding: 10px 20px;
-        border-radius: 10px;
-        color: white;
-        font-weight: 500;
-        transition: all 0.3s ease;
-    }
-
-        .btn-edit:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-            color: white;
+        .success-alert i {
+            font-size: 1.1rem;
         }
-
-    .btn-password {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        border: none;
-        padding: 10px 20px;
-        border-radius: 10px;
-        color: white;
-        font-weight: 500;
-        transition: all 0.3s ease;
-    }
-
-        .btn-password:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(240, 147, 251, 0.4);
-            color: white;
-        }
-
-    .quick-actions {
-        display: flex;
-        gap: 15px;
-        flex-wrap: wrap;
-    }
-
-    .quick-action-btn {
-        flex: 1;
-        min-width: 200px;
-        padding: 20px;
-        border-radius: 12px;
-        border: 2px solid #e9ecef;
-        background: white;
-        text-decoration: none;
-        color: #333;
-        display: flex;
-        align-items: center;
-        gap: 15px;
-        transition: all 0.3s ease;
-    }
-
-        .quick-action-btn:hover {
-            border-color: #667eea;
-            background: #f8f9ff;
-            color: #333;
-            transform: translateY(-3px);
-        }
-
-        .quick-action-btn i {
-            font-size: 24px;
-            color: #667eea;
-        }
-
-        .quick-action-btn span {
-            font-weight: 500;
-        }
-
-    .alert-success-custom {
-        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-        color: white;
-        border: none;
-        border-radius: 12px;
-        padding: 15px 20px;
-    }
 </style>
 
-<div class="container py-4">
-    @if (TempData["SuccessMessage"] != null)
-    {
-        <div class="alert alert-success-custom alert-dismissible fade show" role="alert">
-            <i class="bi bi-check-circle me-2"></i>@TempData["SuccessMessage"]
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
-        </div>
-    }
-
-    <!-- Profile Header -->
-    <div class="profile-header">
-        <div class="row align-items-center">
-            <div class="col-auto">
-                <div class="profile-avatar">
-                    @Model.FirstName[0]@Model.LastName[0]
+<div class="profile-page">
+    <!-- HERO -->
+    <div class="profile-hero">
+        <div class="container">
+            <div class="hero-inner">
+                <div class="hero-left">
+                    <div class="avatar-box">
+                        @(Model.FirstName?.Length > 0 ? Model.FirstName[0].ToString().ToUpper() : "")@(Model.LastName?.Length > 0 ? Model.LastName[0].ToString().ToUpper() : "")
+                    </div>
+                    <div class="user-info">
+                        <h1>@Model.FullName</h1>
+                        <p class="email">
+                            <i class="bi bi-envelope-fill"></i>
+                            @Model.Email
+                        </p>
+                        <div class="user-meta-row">
+                            <span class="meta-tag">
+                                <i class="bi bi-calendar-check"></i>
+                                Member since @Model.RegistrationDate.ToString("MMMM yyyy")
+                            </span>
+                            @if (!string.IsNullOrEmpty(Model.Address))
+                            {
+                                <span class="meta-tag">
+                                    <i class="bi bi-geo-alt"></i>
+                                    @Model.Address
+                                </span>
+                            }
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="col">
-                <h1 class="profile-name">@Model.FullName</h1>
-                <p class="profile-email mb-0">
-                    <i class="bi bi-envelope me-2"></i>@Model.Email
-                </p>
-                <div class="member-badge">
-                    <i class="bi bi-calendar-check"></i>
-                    Member since @Model.RegistrationDate.ToString("MMMM yyyy")
-                </div>
-            </div>
-            <div class="col-auto">
-                <a asp-action="EditProfile" class="btn btn-light btn-lg">
-                    <i class="bi bi-pencil me-2"></i>Edit Profile
+                <a asp-action="EditProfile" class="btn-edit-profile">
+                    <i class="bi bi-pencil-square"></i>
+                    Edit Profile
                 </a>
             </div>
         </div>
-    </div>
 
-    <!-- Statistics -->
-    <div class="row g-4 mb-4">
-        <div class="col-md-3 col-6">
-            <div class="stat-card">
-                <div class="stat-icon bookings">
-                    <i class="bi bi-bookmark-check"></i>
+        <!-- Globe + Airplane Logo -->
+        <div class="globe-logo">
+            <div class="globe-container">
+                <div class="orbit-line"></div>
+                <div class="globe-circle">
+                    <div class="globe-ellipse"></div>
                 </div>
-                <div class="stat-number">@Model.TotalBookings</div>
-                <div class="stat-label">Total Bookings</div>
-            </div>
-        </div>
-        <div class="col-md-3 col-6">
-            <div class="stat-card">
-                <div class="stat-icon completed">
-                    <i class="bi bi-check-circle"></i>
-                </div>
-                <div class="stat-number">@Model.CompletedTrips</div>
-                <div class="stat-label">Completed Trips</div>
-            </div>
-        </div>
-        <div class="col-md-3 col-6">
-            <div class="stat-card">
-                <div class="stat-icon upcoming">
-                    <i class="bi bi-airplane"></i>
-                </div>
-                <div class="stat-number">@Model.UpcomingTrips</div>
-                <div class="stat-label">Upcoming Trips</div>
-            </div>
-        </div>
-        <div class="col-md-3 col-6">
-            <div class="stat-card">
-                <div class="stat-icon reviews">
-                    <i class="bi bi-star"></i>
-                </div>
-                <div class="stat-number">@Model.TotalReviews</div>
-                <div class="stat-label">Reviews Written</div>
+                <i class="bi bi-airplane-fill globe-plane"></i>
             </div>
         </div>
     </div>
 
-    <div class="row g-4">
-        <!-- Personal Information -->
-        <div class="col-lg-6">
-            <div class="info-card h-100">
-                <div class="info-card-header">
-                    <h5><i class="bi bi-person me-2"></i>Personal Information</h5>
-                    <a asp-action="EditProfile" class="btn btn-edit btn-sm">
-                        <i class="bi bi-pencil me-1"></i>Edit
+    <!-- CONTENT -->
+    <div class="content-section">
+        <div class="container">
+            @if (TempData["SuccessMessage"] != null)
+            {
+                <div class="success-alert">
+                    <i class="bi bi-check-circle-fill"></i>
+                    @TempData["SuccessMessage"]
+                </div>
+            }
+
+            <div class="content-grid">
+                <!-- Personal Information -->
+                <div class="info-card">
+                    <div class="info-card-header">
+                        <h3><i class="bi bi-person-fill"></i> Personal Information</h3>
+                        <a asp-action="EditProfile" class="btn-card">
+                            <i class="bi bi-pencil"></i> Edit
+                        </a>
+                    </div>
+                    <div class="info-card-body">
+                        <div class="info-row">
+                            <div class="info-row-icon"><i class="bi bi-person"></i></div>
+                            <div class="info-row-content">
+                                <div class="info-row-label">Full Name</div>
+                                <div class="info-row-value">@Model.FullName</div>
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-row-icon"><i class="bi bi-envelope"></i></div>
+                            <div class="info-row-content">
+                                <div class="info-row-label">Email</div>
+                                <div class="info-row-value">@Model.Email</div>
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-row-icon"><i class="bi bi-cake2"></i></div>
+                            <div class="info-row-content">
+                                <div class="info-row-label">Birthday</div>
+                                <div class="info-row-value">
+                                    @if (Model.DateOfBirth.HasValue && Model.DateOfBirth.Value.Year > 1900)
+                                    {
+                                        @Model.DateOfBirth.Value.ToString("MMMM dd, yyyy")
+                                        <span class="age-chip">@Model.Age years</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="warning-row">
+                                            <i class="bi bi-exclamation-triangle-fill"></i>
+                                            Required for age-restricted trips
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-row-icon"><i class="bi bi-geo-alt"></i></div>
+                            <div class="info-row-content">
+                                <div class="info-row-label">Address</div>
+                                <div class="info-row-value">
+                                    @if (!string.IsNullOrEmpty(Model.Address))
+                                    {
+                                        @Model.Address
+                                    }
+                                    else
+                                    {
+                                        <span class="muted">Not specified</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Account Security -->
+                <div class="info-card">
+                    <div class="info-card-header">
+                        <h3><i class="bi bi-shield-lock-fill"></i> Account Security</h3>
+                    </div>
+                    <div class="info-card-body">
+                        <div class="info-row">
+                            <div class="info-row-icon"><i class="bi bi-key"></i></div>
+                            <div class="info-row-content">
+                                <div class="info-row-label">Password</div>
+                                <div class="info-row-value d-flex align-items-center gap-3 flex-wrap">
+                                    <span>••••••••••</span>
+                                    <a asp-action="ChangePassword" class="btn-card red">
+                                        <i class="bi bi-pencil"></i> Change
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-row-icon"><i class="bi bi-calendar3"></i></div>
+                            <div class="info-row-content">
+                                <div class="info-row-label">Member Since</div>
+                                <div class="info-row-value">@Model.RegistrationDate.ToString("MMMM dd, yyyy")</div>
+                            </div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-row-icon"><i class="bi bi-patch-check"></i></div>
+                            <div class="info-row-content">
+                                <div class="info-row-label">Account Status</div>
+                                <div class="info-row-value">
+                                    <span class="status-chip">
+                                        <span class="dot"></span>
+                                        Active
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="actions-section">
+                <h3 class="section-title">
+                    <i class="bi bi-lightning-charge-fill"></i>
+                    Quick Actions
+                </h3>
+                <div class="actions-grid">
+                    <a asp-controller="Booking" asp-action="MyBookings" class="action-card">
+                        <div class="action-icon blue">
+                            <i class="bi bi-journal-bookmark-fill"></i>
+                        </div>
+                        <span class="action-label">My Bookings</span>
+                    </a>
+                    <a asp-controller="Trip" asp-action="Index" class="action-card">
+                        <div class="action-icon green">
+                            <i class="bi bi-globe-americas"></i>
+                        </div>
+                        <span class="action-label">Browse Trips</span>
+                    </a>
+                    <a asp-controller="Cart" asp-action="Index" class="action-card">
+                        <div class="action-icon orange">
+                            <i class="bi bi-cart-fill"></i>
+                        </div>
+                        <span class="action-label">View Cart</span>
+                    </a>
+                    <a asp-controller="Review" asp-action="Create" class="action-card">
+                        <div class="action-icon purple">
+                            <i class="bi bi-star-fill"></i>
+                        </div>
+                        <span class="action-label">Write Review</span>
                     </a>
                 </div>
-                <div class="info-card-body">
-                    <div class="info-row">
-                        <div class="info-label">
-                            <i class="bi bi-person-badge"></i> Full Name
-                        </div>
-                        <div class="info-value">@Model.FullName</div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">
-                            <i class="bi bi-envelope"></i> Email
-                        </div>
-                        <div class="info-value">@Model.Email</div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">
-                            <i class="bi bi-calendar"></i> Birthday
-                        </div>
-                        <div class="info-value">
-                            @if (Model.DateOfBirth.HasValue)
-                            {
-                                @Model.DateOfBirth.Value.ToString("MMMM dd, yyyy")
-                                <span class="text-muted ms-2">(@Model.Age years old)</span>
-                            }
-                            else
-                            {
-                                <span class="text-muted">Not specified</span>
-                            }
-                        </div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">
-                            <i class="bi bi-geo-alt"></i> Address
-                        </div>
-                        <div class="info-value">
-                            @if (!string.IsNullOrEmpty(Model.Address))
-                            {
-                                @Model.Address
-                            }
-                            else
-                            {
-                                <span class="text-muted">Not specified</span>
-                            }
-                        </div>
-                    </div>
-                </div>
             </div>
-        </div>
-
-        <!-- Account Security -->
-        <div class="col-lg-6">
-            <div class="info-card h-100">
-                <div class="info-card-header">
-                    <h5><i class="bi bi-shield-lock me-2"></i>Account Security</h5>
-                </div>
-                <div class="info-card-body">
-                    <div class="info-row">
-                        <div class="info-label">
-                            <i class="bi bi-key"></i> Password
-                        </div>
-                        <div class="info-value">
-                            ••••••••••
-                            <a asp-action="ChangePassword" class="btn btn-password btn-sm ms-3">
-                                <i class="bi bi-pencil me-1"></i>Change
-                            </a>
-                        </div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">
-                            <i class="bi bi-clock"></i> Member Since
-                        </div>
-                        <div class="info-value">@Model.RegistrationDate.ToString("MMMM dd, yyyy")</div>
-                    </div>
-                    <div class="info-row">
-                        <div class="info-label">
-                            <i class="bi bi-check-circle"></i> Status
-                        </div>
-                        <div class="info-value">
-                            <span class="badge bg-success">Active</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Quick Actions -->
-    <div class="mt-4">
-        <h5 class="mb-3"><i class="bi bi-lightning me-2"></i>Quick Actions</h5>
-        <div class="quick-actions">
-            <a asp-controller="Booking" asp-action="MyBookings" class="quick-action-btn">
-                <i class="bi bi-journal-bookmark"></i>
-                <span>View My Bookings</span>
-            </a>
-            <a asp-controller="Trip" asp-action="Index" class="quick-action-btn">
-                <i class="bi bi-search"></i>
-                <span>Browse Trips</span>
-            </a>
-            <a asp-controller="Cart" asp-action="Index" class="quick-action-btn">
-                <i class="bi bi-cart"></i>
-                <span>View Cart</span>
-            </a>
-            <a asp-controller="Review" asp-action="Create" class="quick-action-btn">
-                <i class="bi bi-star"></i>
-                <span>Write a Review</span>
-            </a>
         </div>
     </div>
 </div>
