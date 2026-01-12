@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using TravelAgencyService.Data;
 using TravelAgencyService.Models;
 using TravelAgencyService.Models.ViewModels;
+using TravelAgencyService.Services.Email;
 
 namespace TravelAgencyService.Controllers
 {
@@ -13,11 +14,13 @@ namespace TravelAgencyService.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly IEmailSender _emailSender;
 
-        public WaitingListController(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
+        public WaitingListController(ApplicationDbContext context, UserManager<ApplicationUser> userManager, IEmailSender emailSender)
         {
             _context = context;
             _userManager = userManager;
+            _emailSender = emailSender;
         }
 
         // GET: /WaitingList/Index
@@ -28,7 +31,8 @@ namespace TravelAgencyService.Controllers
 
             var myWaitingLists = await _context.WaitingListEntries
                 .Include(w => w.Trip)
-                .Where(w => w.UserId == user.Id && w.Status == WaitingListStatus.Waiting)
+                .Where(w => w.UserId == user.Id &&
+                           (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified))
                 .OrderBy(w => w.JoinedDate)
                 .Select(w => new
                 {
@@ -37,7 +41,9 @@ namespace TravelAgencyService.Controllers
                     TripName = w.Trip != null ? w.Trip.PackageName : "Unknown",
                     w.Position,
                     w.JoinedDate,
-                    w.RoomsRequested
+                    w.RoomsRequested,
+                    w.Status,
+                    w.NotificationExpiresAt
                 })
                 .ToListAsync();
 
@@ -53,26 +59,28 @@ namespace TravelAgencyService.Controllers
             var trip = await _context.Trips.FirstOrDefaultAsync(t => t.TripId == tripId);
             if (trip == null) return NotFound();
 
-            // Count waiting
             var waitingQuery = _context.WaitingListEntries
                 .Where(e => e.TripId == tripId && e.Status == WaitingListStatus.Waiting);
 
             var totalWaiting = await waitingQuery.CountAsync();
 
-            // My entry?
-            var myEntry = await waitingQuery
-                .Where(e => e.UserId == user.Id)
-                .OrderBy(e => e.JoinedDate)
+            var myEntry = await _context.WaitingListEntries
+                .Where(e => e.UserId == user.Id &&
+                           e.TripId == tripId &&
+                           (e.Status == WaitingListStatus.Waiting || e.Status == WaitingListStatus.Notified))
                 .FirstOrDefaultAsync();
 
             int? myPosition = null;
+            bool isNotified = false;
+            DateTime? expiresAt = null;
+
             if (myEntry != null)
             {
-                var countBefore = await waitingQuery.CountAsync(e => e.JoinedDate < myEntry.JoinedDate);
-                myPosition = countBefore + 1;
+                myPosition = myEntry.Position;
+                isNotified = myEntry.Status == WaitingListStatus.Notified;
+                expiresAt = myEntry.NotificationExpiresAt;
             }
 
-            // ETA
             string etaText = "";
             if (trip.AvailableRooms > 0)
                 etaText = "Rooms are available now — no need for waiting list.";
@@ -97,7 +105,9 @@ namespace TravelAgencyService.Controllers
                 CanLeave = (myEntry != null),
                 Message = trip.AvailableRooms == 0
                     ? "This trip is fully booked. You can join the waiting list."
-                    : "Rooms are available — no need for waiting list."
+                    : "Rooms are available — no need for waiting list.",
+                IsNotified = isNotified,
+                NotificationExpiresAt = expiresAt
             };
 
             return View(vm);
@@ -114,35 +124,56 @@ namespace TravelAgencyService.Controllers
             var trip = await _context.Trips.FirstOrDefaultAsync(t => t.TripId == tripId);
             if (trip == null) return NotFound();
 
-            // Can only join when no rooms
             if (trip.AvailableRooms > 0)
             {
                 TempData["Error"] = "Cannot join waiting list when rooms are available.";
                 return RedirectToAction(nameof(Status), new { tripId });
             }
 
-            // Already in queue?
-            var already = await _context.WaitingListEntries.AnyAsync(e =>
-                e.TripId == tripId &&
-                e.UserId == user.Id &&
-                e.Status == WaitingListStatus.Waiting);
-
-            if (already)
-            {
-                TempData["Error"] = "You're already in the waiting list.";
-                return RedirectToAction(nameof(Status), new { tripId });
-            }
-
-            // Email required
             if (string.IsNullOrWhiteSpace(user.Email))
             {
                 TempData["Error"] = "Email is required to join the waiting list.";
                 return RedirectToAction(nameof(Status), new { tripId });
             }
 
-            // Calculate position (FIFO)
-            var maxPosition = await _context.WaitingListEntries
-                .Where(e => e.TripId == tripId && e.Status == WaitingListStatus.Waiting)
+            // Check if user already has an entry for this trip
+            var existingEntry = await _context.WaitingListEntries
+                .FirstOrDefaultAsync(e => e.TripId == tripId && e.UserId == user.Id);
+
+            if (existingEntry != null)
+            {
+                // If already waiting or notified - can't join again
+                if (existingEntry.Status == WaitingListStatus.Waiting ||
+                    existingEntry.Status == WaitingListStatus.Notified)
+                {
+                    TempData["Error"] = "You're already in the waiting list.";
+                    return RedirectToAction(nameof(Status), new { tripId });
+                }
+
+                // If cancelled, expired, or booked - allow rejoining by updating existing entry
+                var maxPosition = await _context.WaitingListEntries
+                    .Where(e => e.TripId == tripId &&
+                               (e.Status == WaitingListStatus.Waiting || e.Status == WaitingListStatus.Notified))
+                    .MaxAsync(e => (int?)e.Position) ?? 0;
+
+                existingEntry.Position = maxPosition + 1;
+                existingEntry.JoinedDate = DateTime.Now;
+                existingEntry.Status = WaitingListStatus.Waiting;
+                existingEntry.IsNotified = false;
+                existingEntry.NotificationDate = null;
+                existingEntry.NotificationExpiresAt = null;
+                existingEntry.RoomsRequested = 1;
+
+                await _context.SaveChangesAsync();
+
+                TempData["Success"] = $"You've been added to the waiting list at position #{existingEntry.Position}!";
+                return RedirectToAction(nameof(Status), new { tripId });
+            }
+
+            // No existing entry - create new one
+            var newMaxPosition = await _context.WaitingListEntries
+                .Where(e => e.TripId == tripId &&
+                           (e.Status == WaitingListStatus.Waiting || e.Status == WaitingListStatus.Notified))
                 .MaxAsync(e => (int?)e.Position) ?? 0;
 
             _context.WaitingListEntries.Add(new WaitingListEntry
@@ -150,7 +181,7 @@ namespace TravelAgencyService.Controllers
                 TripId = tripId,
                 UserId = user.Id,
                 JoinedDate = DateTime.Now,
-                Position = maxPosition + 1,
+                Position = newMaxPosition + 1,
                 Status = WaitingListStatus.Waiting,
                 RoomsRequested = 1
             });
@@ -169,19 +200,236 @@ namespace TravelAgencyService.Controllers
             var user = await _userManager.GetUserAsync(User);
             if (user == null) return Challenge();
 
-            var entry = await _context.WaitingListEntries.FirstOrDefaultAsync(e =>
-                e.TripId == tripId &&
-                e.UserId == user.Id &&
-                e.Status == WaitingListStatus.Waiting);
+            var entry = await _context.WaitingListEntries
+                .Include(e => e.Trip)
+                .FirstOrDefaultAsync(e =>
+                    e.TripId == tripId &&
+                    e.UserId == user.Id &&
+                    (e.Status == WaitingListStatus.Waiting || e.Status == WaitingListStatus.Notified));
 
             if (entry != null)
             {
+                var removedPosition = entry.Position;
+                var wasNotified = entry.Status == WaitingListStatus.Notified;
+
                 entry.Status = WaitingListStatus.Cancelled;
+
+                // Advance positions for everyone after this user
+                var entriesToAdvance = await _context.WaitingListEntries
+                    .Where(w => w.TripId == tripId &&
+                                w.Status == WaitingListStatus.Waiting &&
+                                w.Position > removedPosition)
+                    .ToListAsync();
+
+                foreach (var e in entriesToAdvance)
+                {
+                    e.Position--;
+                }
+
                 await _context.SaveChangesAsync();
+
+                // If the user who left was Notified, notify the next eligible person
+                if (wasNotified)
+                {
+                    var trip = await _context.Trips.FindAsync(tripId);
+                    if (trip != null && trip.AvailableRooms > 0)
+                    {
+                        await ProcessWaitingListAfterLeave(tripId, trip.AvailableRooms);
+                    }
+                }
+
+                // Send position update emails to remaining users
+                await SendPositionUpdateEmails(tripId);
+
                 TempData["Success"] = "You've been removed from the waiting list.";
             }
 
             return RedirectToAction(nameof(Status), new { tripId });
         }
+
+        #region Helper Methods
+
+        private async Task ProcessWaitingListAfterLeave(int tripId, int availableRooms)
+        {
+            var eligibleEntry = await FindEligibleWaitingListEntry(tripId, availableRooms);
+
+            if (eligibleEntry != null)
+            {
+                eligibleEntry.Status = WaitingListStatus.Notified;
+                eligibleEntry.IsNotified = true;
+                eligibleEntry.NotificationDate = DateTime.Now;
+                eligibleEntry.NotificationExpiresAt = DateTime.Now.AddHours(24);
+
+                await _context.SaveChangesAsync();
+
+                await SendWaitingListNotificationEmail(eligibleEntry);
+            }
+        }
+
+        private async Task<WaitingListEntry?> FindEligibleWaitingListEntry(int tripId, int availableRooms)
+        {
+            var waitingEntries = await _context.WaitingListEntries
+                .Include(w => w.User)
+                .Include(w => w.Trip)
+                .Where(w => w.TripId == tripId && w.Status == WaitingListStatus.Waiting)
+                .OrderBy(w => w.Position)
+                .ToListAsync();
+
+            foreach (var entry in waitingEntries)
+            {
+                if (entry.RoomsRequested > availableRooms)
+                {
+                    continue;
+                }
+
+                var activeBookingsCount = await _context.Bookings
+                    .CountAsync(b => b.UserId == entry.UserId &&
+                                     b.Status == BookingStatus.Confirmed &&
+                                     b.Trip!.StartDate > DateTime.Now);
+
+                if (activeBookingsCount >= 3)
+                {
+                    continue;
+                }
+
+                return entry;
+            }
+
+            return null;
+        }
+
+        private async Task SendWaitingListNotificationEmail(WaitingListEntry entry)
+        {
+            try
+            {
+                var userEmail = entry.User?.Email;
+                if (string.IsNullOrEmpty(userEmail)) return;
+
+                var userName = entry.User?.FirstName ?? "Traveler";
+                var tripName = entry.Trip?.PackageName ?? "Your Trip";
+                var destination = entry.Trip?.Destination ?? "";
+                var country = entry.Trip?.Country ?? "";
+                var tripId = entry.TripId;
+
+                var subject = $"Good News! A spot opened for {tripName}";
+
+                var htmlBody = $@"
+                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+                    <div style='background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); padding: 30px; text-align: center;'>
+                        <h1 style='color: white; margin: 0;'>Your Turn Has Come!</h1>
+                    </div>
+                    
+                    <div style='padding: 30px; background: #f9f9f9;'>
+                        <p style='font-size: 18px;'>Hi {userName},</p>
+                        
+                        <p>Great news! A spot has opened up for the trip you were waiting for:</p>
+                        
+                        <div style='background: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #11998e;'>
+                            <h2 style='color: #11998e; margin-top: 0;'>{tripName}</h2>
+                            <p><strong>Destination:</strong> {destination}, {country}</p>
+                            <p><strong>Rooms Requested:</strong> {entry.RoomsRequested}</p>
+                        </div>
+                        
+                        <div style='background: #fff3cd; padding: 15px; border-radius: 10px; margin: 20px 0;'>
+                            <p style='margin: 0; color: #856404;'>
+                                <strong>Important:</strong> You have <strong>24 hours</strong> to complete your booking before the spot is offered to the next person in line.
+                            </p>
+                        </div>
+                        
+                        <div style='text-align: center; margin: 30px 0;'>
+                            <a href='https://localhost:7232/Booking/Book/{tripId}' 
+                               style='background: #11998e; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-size: 18px; display: inline-block;'>
+                                Book Now
+                            </a>
+                        </div>
+                        
+                        <p>Don't miss this opportunity!</p>
+                        
+                        <p style='color: #888; font-size: 14px;'>
+                            Best regards,<br>
+                            Travel Agency Team
+                        </p>
+                    </div>
+                    
+                    <div style='background: #333; color: white; padding: 20px; text-align: center;'>
+                        <p style='margin: 0;'>{DateTime.Now.Year} Travel Agency Service</p>
+                    </div>
+                </div>";
+
+                await _emailSender.SendAsync(userEmail, subject, htmlBody);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to send waiting list notification email: {ex.Message}");
+            }
+        }
+
+        private async Task SendPositionUpdateEmails(int tripId)
+        {
+            var waitingEntries = await _context.WaitingListEntries
+                .Include(w => w.User)
+                .Include(w => w.Trip)
+                .Where(w => w.TripId == tripId && w.Status == WaitingListStatus.Waiting)
+                .OrderBy(w => w.Position)
+                .ToListAsync();
+
+            foreach (var entry in waitingEntries)
+            {
+                await SendPositionUpdateEmail(entry);
+            }
+        }
+
+        private async Task SendPositionUpdateEmail(WaitingListEntry entry)
+        {
+            try
+            {
+                var userEmail = entry.User?.Email;
+                if (string.IsNullOrEmpty(userEmail)) return;
+
+                var userName = entry.User?.FirstName ?? "Traveler";
+                var tripName = entry.Trip?.PackageName ?? "Your Trip";
+                var destination = entry.Trip?.Destination ?? "";
+
+                var subject = $"Waiting List Update - {tripName}";
+
+                var htmlBody = $@"
+                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+                    <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;'>
+                        <h1 style='color: white; margin: 0;'>Position Update!</h1>
+                    </div>
+                    
+                    <div style='padding: 30px; background: #f9f9f9;'>
+                        <p style='font-size: 18px;'>Hi {userName},</p>
+                        
+                        <p>Good news! You've moved up in the waiting list for:</p>
+                        
+                        <div style='background: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #667eea;'>
+                            <h2 style='color: #667eea; margin-top: 0;'>{tripName}</h2>
+                            <p><strong>Destination:</strong> {destination}</p>
+                            <p><strong>Your position in line:</strong> <span style='font-size: 24px; font-weight: bold; color: #667eea;'>#{entry.Position}</span></p>
+                        </div>
+                        
+                        <p>We'll notify you as soon as a spot becomes available!</p>
+                        
+                        <p style='color: #888; font-size: 14px;'>
+                            Best regards,<br>
+                            Travel Agency Team
+                        </p>
+                    </div>
+                    
+                    <div style='background: #333; color: white; padding: 20px; text-align: center;'>
+                        <p style='margin: 0;'>{DateTime.Now.Year} Travel Agency Service</p>
+                    </div>
+                </div>";
+
+                await _emailSender.SendAsync(userEmail, subject, htmlBody);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to send position update email: {ex.Message}");
+            }
+        }
+
+        #endregion
     }
 }

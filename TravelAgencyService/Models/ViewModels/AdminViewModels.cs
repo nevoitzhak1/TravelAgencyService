@@ -235,17 +235,5 @@ namespace TravelAgencyService.Models.ViewModels
         public int TotalEntries { get; set; }
     }
 
-    public class WaitingListItemViewModel
-    {
-        public int WaitingListEntryId { get; set; }
-        public string UserName { get; set; } = string.Empty;
-        public string UserEmail { get; set; } = string.Empty;
-        public string TripName { get; set; } = string.Empty;
-        public int TripId { get; set; }
-        public int Position { get; set; }
-        public DateTime JoinedDate { get; set; }
-        public int RoomsRequested { get; set; }
-        public WaitingListStatus Status { get; set; }
-        public bool IsNotified { get; set; }
-    }
+ 
 }

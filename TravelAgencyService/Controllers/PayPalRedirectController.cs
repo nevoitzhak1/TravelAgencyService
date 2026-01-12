@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using TravelAgencyService.Data;
 using TravelAgencyService.Models;
+using TravelAgencyService.Services;
+using TravelAgencyService.Services.Email;
 using TravelAgencyService.Services.PayPal;
 
 namespace TravelAgencyService.Controllers;
@@ -13,11 +15,19 @@ public class PayPalRedirectController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly PayPalClient _pp;
+    private readonly IEmailSender _emailSender;
+    private readonly PdfService _pdfService;
 
-    public PayPalRedirectController(ApplicationDbContext context, PayPalClient pp)
+    public PayPalRedirectController(
+        ApplicationDbContext context,
+        PayPalClient pp,
+        IEmailSender emailSender,
+        PdfService pdfService)
     {
         _context = context;
         _pp = pp;
+        _emailSender = emailSender;
+        _pdfService = pdfService;
     }
 
     [HttpPost]
@@ -39,7 +49,18 @@ public class PayPalRedirectController : Controller
             return RedirectToAction("Index", "Cart");
         }
 
-        // בודק זמינות + מחשב סכום מהשרת (לא סומכים על הלקוח)
+        // Check waiting list priority for each item
+        foreach (var item in cartItems)
+        {
+            var priorityCheck = await CheckWaitingListPriority(item.TripId, userId);
+            if (!priorityCheck.CanProceed)
+            {
+                TempData["Error"] = $"'{item.Trip?.PackageName}': {priorityCheck.Message}";
+                return RedirectToAction("Index", "Cart");
+            }
+        }
+
+        // Validate availability and calculate total
         decimal total = 0m;
         foreach (var item in cartItems)
         {
@@ -53,7 +74,7 @@ public class PayPalRedirectController : Controller
             total += trip.Price * item.NumberOfRooms;
         }
 
-        // יוצר Bookings במצב Pending (לא שורף מלאי עדיין!)
+        // Create Bookings with Pending status (not burning inventory yet)
         using var tx = await _context.Database.BeginTransactionAsync(ct);
         var bookingIds = new List<int>();
 
@@ -94,7 +115,6 @@ public class PayPalRedirectController : Controller
             return RedirectToAction("Checkout", "Cart");
         }
 
-        // מחזירים ids ב-query (ללא שינוי DB)
         var bookingIdsCsv = string.Join(",", bookingIds);
 
         var returnUrl = Url.Action("Return", "PayPalRedirect", new { bookingIds = bookingIdsCsv }, Request.Scheme)!;
@@ -103,7 +123,7 @@ public class PayPalRedirectController : Controller
         var currency = "USD";
         var (_, approveUrl) = await _pp.CreateOrderAndGetApproveUrlAsync(total, currency, returnUrl, cancelUrl, ct);
 
-        return Redirect(approveUrl); // ✅ Redirect אמיתי ל-PayPal
+        return Redirect(approveUrl);
     }
 
     [HttpGet]
@@ -134,6 +154,8 @@ public class PayPalRedirectController : Controller
         try
         {
             var bookings = await _context.Bookings
+                .Include(b => b.Trip)
+                .Include(b => b.User)
                 .Where(b => ids.Contains(b.BookingId) && b.UserId == userId)
                 .ToListAsync(ct);
 
@@ -148,7 +170,7 @@ public class PayPalRedirectController : Controller
                 if (trip == null || trip.AvailableRooms < b.NumberOfRooms)
                     throw new Exception("Trip availability changed.");
 
-                // עכשיו שורפים מלאי
+                // Burn inventory now
                 trip.AvailableRooms -= b.NumberOfRooms;
                 trip.TimesBooked++;
                 trip.UpdatedAt = DateTime.Now;
@@ -157,6 +179,19 @@ public class PayPalRedirectController : Controller
                 b.PaymentDate = DateTime.Now;
                 b.Status = BookingStatus.Confirmed;
                 b.UpdatedAt = DateTime.Now;
+
+                // Update waiting list if user was in it
+                var userWaitingEntry = await _context.WaitingListEntries
+                    .FirstOrDefaultAsync(w => w.UserId == userId &&
+                                              w.TripId == b.TripId &&
+                                              (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified), ct);
+
+                if (userWaitingEntry != null)
+                {
+                    var removedPosition = userWaitingEntry.Position;
+                    userWaitingEntry.Status = WaitingListStatus.Booked;
+                    await AdvanceWaitingListPositions(b.TripId, removedPosition, ct);
+                }
             }
 
             var cartItems = await _context.CartItems.Where(c => c.UserId == userId).ToListAsync(ct);
@@ -165,8 +200,14 @@ public class PayPalRedirectController : Controller
             await _context.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
 
+            // Send confirmation emails
+            foreach (var booking in bookings)
+            {
+                await SendBookingConfirmationEmail(booking);
+            }
+
             TempData["Success"] = $"PayPal payment successful! {bookings.Count} booking(s) confirmed.";
-            return RedirectToAction("Index", "Home");
+            return RedirectToAction("MyBookings", "Booking");
         }
         catch
         {
@@ -181,7 +222,7 @@ public class PayPalRedirectController : Controller
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        // מוחקים את ה-Pending שנוצרו
+        // Delete the Pending bookings that were created
         if (!string.IsNullOrWhiteSpace(userId) && !string.IsNullOrWhiteSpace(bookingIds))
         {
             var ids = bookingIds.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).ToList();
@@ -196,4 +237,126 @@ public class PayPalRedirectController : Controller
         TempData["Error"] = "PayPal payment was canceled.";
         return RedirectToAction("Checkout", "Cart");
     }
+
+    #region Helper Methods
+
+    private async Task<(bool CanProceed, string Message)> CheckWaitingListPriority(int tripId, string currentUserId)
+    {
+        var notifiedEntry = await _context.WaitingListEntries
+            .Where(w => w.TripId == tripId &&
+                        w.Status == WaitingListStatus.Notified &&
+                        w.NotificationExpiresAt > DateTime.Now)
+            .FirstOrDefaultAsync();
+
+        if (notifiedEntry == null)
+        {
+            return (true, string.Empty);
+        }
+
+        if (notifiedEntry.UserId == currentUserId)
+        {
+            return (true, string.Empty);
+        }
+
+        return (false, "Someone from the waiting list currently has priority to book. Please try again later.");
+    }
+
+    private async Task AdvanceWaitingListPositions(int tripId, int removedPosition, CancellationToken ct)
+    {
+        var entriesToAdvance = await _context.WaitingListEntries
+            .Where(w => w.TripId == tripId &&
+                        w.Status == WaitingListStatus.Waiting &&
+                        w.Position > removedPosition)
+            .ToListAsync(ct);
+
+        foreach (var entry in entriesToAdvance)
+        {
+            entry.Position--;
+        }
+    }
+
+    private async Task SendBookingConfirmationEmail(Booking booking)
+    {
+        try
+        {
+            if (booking.User == null || string.IsNullOrEmpty(booking.User.Email))
+                return;
+
+            var userName = booking.User.FirstName ?? "Traveler";
+            var tripName = booking.Trip?.PackageName ?? "Your Trip";
+            var destination = booking.Trip?.Destination ?? "";
+            var country = booking.Trip?.Country ?? "";
+            var startDate = booking.Trip?.StartDate.ToString("MMMM dd, yyyy") ?? "";
+            var endDate = booking.Trip?.EndDate.ToString("MMMM dd, yyyy") ?? "";
+
+            var subject = $"Booking Confirmed - {tripName}";
+
+            var htmlBody = $@"
+            <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+                <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;'>
+                    <h1 style='color: white; margin: 0;'>Booking Confirmed!</h1>
+                </div>
+                
+                <div style='padding: 30px; background: #f9f9f9;'>
+                    <p style='font-size: 18px;'>Hi {userName},</p>
+                    
+                    <p>Your PayPal payment was successful! Here are your booking details:</p>
+                    
+                    <div style='background: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #667eea;'>
+                        <h2 style='color: #667eea; margin-top: 0;'>{tripName}</h2>
+                        <p><strong>Destination:</strong> {destination}, {country}</p>
+                        <p><strong>Dates:</strong> {startDate} - {endDate}</p>
+                        <p><strong>Rooms:</strong> {booking.NumberOfRooms}</p>
+                        <p><strong>Total Paid:</strong> ${booking.TotalPrice:N2}</p>
+                        <p><strong>Booking ID:</strong> #{booking.BookingId}</p>
+                        <p><strong>Payment Method:</strong> PayPal</p>
+                    </div>
+                    
+                    <p>Your PDF itinerary is attached to this email.</p>
+                    
+                    <p style='color: #888; font-size: 14px;'>
+                        Best regards,<br>
+                        Travel Agency Team
+                    </p>
+                </div>
+                
+                <div style='background: #333; color: white; padding: 20px; text-align: center;'>
+                    <p style='margin: 0;'>{DateTime.Now.Year} Travel Agency Service</p>
+                </div>
+            </div>";
+
+            byte[]? pdfBytes = null;
+            try
+            {
+                pdfBytes = _pdfService.GenerateItinerary(booking);
+            }
+            catch
+            {
+                // Continue without PDF if generation fails
+            }
+
+            if (pdfBytes != null)
+            {
+                var fileName = $"Itinerary_{tripName.Replace(" ", "_")}_{booking.BookingId}.pdf";
+                await _emailSender.SendWithAttachmentAsync(
+                    booking.User.Email,
+                    subject,
+                    htmlBody,
+                    pdfBytes,
+                    fileName,
+                    "application/pdf"
+                );
+            }
+            else
+            {
+                await _emailSender.SendAsync(booking.User.Email, subject, htmlBody);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to send booking confirmation email: {ex.Message}");
+        }
+    }
+
+    #endregion
 }

@@ -204,7 +204,19 @@
                     <div class="d-grid gap-2">
                         @if (User.Identity?.IsAuthenticated == true)
                         {
-                            @if (!Model.Trip.IsFullyBooked)
+                            @if (Model.IsMyTurnToBook)
+                            {
+                                <!-- User's turn from waiting list -->
+                                <div class="alert alert-success">
+                                    <i class="bi bi-check-circle"></i>
+                                    <strong>It's your turn!</strong> You have 24 hours to complete your booking.
+                                </div>
+                                <a asp-controller="Booking" asp-action="Book" asp-route-id="@Model.Trip.TripId"
+                                   class="btn btn-success btn-lg">
+                                    <i class="bi bi-calendar-plus"></i> Book Now - Your Turn!
+                                </a>
+                            }
+                            else if (!Model.Trip.IsFullyBooked && !Model.HasWaitingListPriority)
                             {
                                 @if (Model.CanBook)
                                 {
@@ -238,17 +250,37 @@
                                     </div>
                                 }
                             }
-                            else
+                            else if (Model.HasWaitingListPriority)
                             {
+                                <!-- Someone from waiting list has priority -->
+                                <div class="alert alert-info">
+                                    <i class="bi bi-hourglass-split"></i>
+                                    Someone from the waiting list has priority to book. Please check back later.
+                                </div>
                                 @if (!Model.IsInWaitingList)
                                 {
-                                    <form asp-controller="WaitingList" asp-action="Join" method="post">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="tripId" value="@Model.Trip.TripId" />
-                                        <button type="submit" class="btn btn-warning btn-lg w-100">
-                                            <i class="bi bi-hourglass"></i> Join Waiting List
-                                        </button>
-                                    </form>
+                                    <a asp-controller="Booking" asp-action="JoinWaitingList" asp-route-id="@Model.Trip.TripId"
+                                       class="btn btn-warning btn-lg">
+                                        <i class="bi bi-hourglass"></i> Join Waiting List
+                                    </a>
+                                }
+                                else
+                                {
+                                    <a asp-controller="WaitingList" asp-action="Status" asp-route-tripId="@Model.Trip.TripId"
+                                       class="btn btn-info btn-lg">
+                                        <i class="bi bi-eye"></i> View Status (#@Model.WaitingListPosition)
+                                    </a>
+                                }
+                            }
+                            else
+                            {
+                                <!-- Fully booked -->
+                                @if (!Model.IsInWaitingList)
+                                {
+                                    <a asp-controller="Booking" asp-action="JoinWaitingList" asp-route-id="@Model.Trip.TripId"
+                                       class="btn btn-warning btn-lg">
+                                        <i class="bi bi-hourglass"></i> Join Waiting List
+                                    </a>
                                 }
                                 else
                                 {

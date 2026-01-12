@@ -258,7 +258,8 @@ namespace TravelAgencyService.Controllers
 
                 // Check if in waiting list
                 var waitingEntry = await _context.WaitingListEntries
-                    .FirstOrDefaultAsync(w => w.UserId == userId && w.TripId == id && w.Status == WaitingListStatus.Waiting);
+                    .FirstOrDefaultAsync(w => w.UserId == userId && w.TripId == id &&
+                                              (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified));
 
                 if (waitingEntry != null)
                 {
@@ -275,6 +276,31 @@ namespace TravelAgencyService.Controllers
                 canBook = activeBookings < 3;
             }
 
+            // Check if someone else has waiting list priority (24h window)
+            var hasWaitingListPriority = false;
+            var isMyTurnToBook = false;
+
+            if (User.Identity?.IsAuthenticated == true)
+            {
+                var notifiedEntry = await _context.WaitingListEntries
+                    .FirstOrDefaultAsync(w => w.TripId == id &&
+                                              w.Status == WaitingListStatus.Notified &&
+                                              w.NotificationExpiresAt > DateTime.Now);
+
+                if (notifiedEntry != null)
+                {
+                    var userId2 = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                    if (notifiedEntry.UserId == userId2)
+                    {
+                        isMyTurnToBook = true;
+                    }
+                    else
+                    {
+                        hasWaitingListPriority = true;
+                    }
+                }
+            }
+
             var viewModel = new TripDetailsViewModel
             {
                 Trip = tripViewModel,
@@ -284,7 +310,9 @@ namespace TravelAgencyService.Controllers
                 IsInCart = isInCart,
                 IsInWaitingList = isInWaitingList,
                 WaitingListPosition = waitingListPosition,
-                WaitingListCount = waitingListCount
+                WaitingListCount = waitingListCount,
+                HasWaitingListPriority = hasWaitingListPriority,
+                IsMyTurnToBook = isMyTurnToBook
             };
 
             return View(viewModel);

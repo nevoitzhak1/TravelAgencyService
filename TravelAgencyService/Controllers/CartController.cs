@@ -5,6 +5,8 @@ using System.Security.Claims;
 using TravelAgencyService.Data;
 using TravelAgencyService.Models;
 using TravelAgencyService.Models.ViewModels;
+using TravelAgencyService.Services;
+using TravelAgencyService.Services.Email;
 
 namespace TravelAgencyService.Controllers
 {
@@ -12,10 +14,14 @@ namespace TravelAgencyService.Controllers
     public class CartController : Controller
     {
         private readonly ApplicationDbContext _context;
+        private readonly IEmailSender _emailSender;
+        private readonly PdfService _pdfService;
 
-        public CartController(ApplicationDbContext context)
+        public CartController(ApplicationDbContext context, IEmailSender emailSender, PdfService pdfService)
         {
             _context = context;
+            _emailSender = emailSender;
+            _pdfService = pdfService;
         }
 
         public async Task<IActionResult> Index()
@@ -79,6 +85,14 @@ namespace TravelAgencyService.Controllers
             if (!trip.IsVisible || trip.AvailableRooms <= 0 || trip.StartDate <= DateTime.Now)
             {
                 TempData["Error"] = "This trip is not available for booking.";
+                return RedirectToAction("Details", "Trip", new { id });
+            }
+
+            // Check waiting list priority
+            var priorityCheck = await CheckWaitingListPriority(id, userId!);
+            if (!priorityCheck.CanProceed)
+            {
+                TempData["Error"] = priorityCheck.Message;
                 return RedirectToAction("Details", "Trip", new { id });
             }
 
@@ -196,6 +210,17 @@ namespace TravelAgencyService.Controllers
                 return RedirectToAction("Index");
             }
 
+            // Check waiting list priority for each item
+            foreach (var item in cartItems)
+            {
+                var priorityCheck = await CheckWaitingListPriority(item.TripId, userId!);
+                if (!priorityCheck.CanProceed)
+                {
+                    TempData["Error"] = $"'{item.Trip?.PackageName}': {priorityCheck.Message}";
+                    return RedirectToAction("Index");
+                }
+            }
+
             var activeBookingsCount = await _context.Bookings
                 .CountAsync(b => b.UserId == userId &&
                                  b.Status == BookingStatus.Confirmed &&
@@ -242,6 +267,17 @@ namespace TravelAgencyService.Controllers
             {
                 TempData["Error"] = "Your cart is empty.";
                 return RedirectToAction("Index");
+            }
+
+            // Check waiting list priority for each item before processing
+            foreach (var item in cartItems)
+            {
+                var priorityCheck = await CheckWaitingListPriority(item.TripId, userId!);
+                if (!priorityCheck.CanProceed)
+                {
+                    TempData["Error"] = $"'{item.Trip?.PackageName}': {priorityCheck.Message}";
+                    return RedirectToAction("Index");
+                }
             }
 
             var currentDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
@@ -299,6 +335,19 @@ namespace TravelAgencyService.Controllers
                         trip.TimesBooked++;
                         trip.UpdatedAt = DateTime.Now;
 
+                        // Update waiting list if user was in it
+                        var userWaitingEntry = await _context.WaitingListEntries
+                            .FirstOrDefaultAsync(w => w.UserId == userId &&
+                                                      w.TripId == item.TripId &&
+                                                      (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified));
+
+                        if (userWaitingEntry != null)
+                        {
+                            var removedPosition = userWaitingEntry.Position;
+                            userWaitingEntry.Status = WaitingListStatus.Booked;
+                            await AdvanceWaitingListPositions(item.TripId, removedPosition);
+                        }
+
                         _context.Bookings.Add(booking);
                         await _context.SaveChangesAsync();
                         bookingIds.Add(booking.BookingId);
@@ -307,6 +356,12 @@ namespace TravelAgencyService.Controllers
                     _context.CartItems.RemoveRange(cartItems);
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
+
+                    // Send confirmation emails
+                    foreach (var bookingId in bookingIds)
+                    {
+                        await SendBookingConfirmationEmail(bookingId);
+                    }
 
                     TempData["Success"] = $"Payment successful! {bookingIds.Count} booking(s) confirmed.";
                     return RedirectToAction("MyBookings", "Booking");
@@ -367,7 +422,15 @@ namespace TravelAgencyService.Controllers
 
             if (trip.AvailableRooms <= 0)
             {
-                TempData["Error"] = "This trip is fully booked.";
+                TempData["Error"] = "This trip is fully booked. You can join the waiting list.";
+                return RedirectToAction("JoinWaitingList", "Booking", new { id });
+            }
+
+            // Check waiting list priority
+            var priorityCheck = await CheckWaitingListPriority(id, userId!);
+            if (!priorityCheck.CanProceed)
+            {
+                TempData["Error"] = priorityCheck.Message;
                 return RedirectToAction("Details", "Trip", new { id });
             }
 
@@ -395,6 +458,14 @@ namespace TravelAgencyService.Controllers
         public async Task<IActionResult> BuyNow(BuyNowViewModel model)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            // Check waiting list priority before processing
+            var priorityCheck = await CheckWaitingListPriority(model.TripId, userId!);
+            if (!priorityCheck.CanProceed)
+            {
+                TempData["Error"] = priorityCheck.Message;
+                return RedirectToAction("Details", "Trip", new { id = model.TripId });
+            }
 
             var currentDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
             var expiryDate = new DateTime(model.ExpiryYear, model.ExpiryMonth, 1);
@@ -466,9 +537,25 @@ namespace TravelAgencyService.Controllers
                     trip.TimesBooked++;
                     trip.UpdatedAt = DateTime.Now;
 
+                    // Update waiting list if user was in it
+                    var userWaitingEntry = await _context.WaitingListEntries
+                        .FirstOrDefaultAsync(w => w.UserId == userId &&
+                                                  w.TripId == model.TripId &&
+                                                  (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified));
+
+                    if (userWaitingEntry != null)
+                    {
+                        var removedPosition = userWaitingEntry.Position;
+                        userWaitingEntry.Status = WaitingListStatus.Booked;
+                        await AdvanceWaitingListPositions(model.TripId, removedPosition);
+                    }
+
                     _context.Bookings.Add(booking);
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
+
+                    // Send confirmation email with PDF
+                    await SendBookingConfirmationEmail(booking.BookingId);
 
                     TempData["Success"] = "Payment successful! Your booking is confirmed.";
                     return RedirectToAction("Confirmation", "Booking", new { id = booking.BookingId });
@@ -498,5 +585,132 @@ namespace TravelAgencyService.Controllers
 
             return View(model);
         }
+
+        #region Helper Methods
+
+        private async Task<(bool CanProceed, string Message)> CheckWaitingListPriority(int tripId, string currentUserId)
+        {
+            var notifiedEntry = await _context.WaitingListEntries
+                .Where(w => w.TripId == tripId &&
+                            w.Status == WaitingListStatus.Notified &&
+                            w.NotificationExpiresAt > DateTime.Now)
+                .FirstOrDefaultAsync();
+
+            if (notifiedEntry == null)
+            {
+                return (true, string.Empty);
+            }
+
+            if (notifiedEntry.UserId == currentUserId)
+            {
+                return (true, string.Empty);
+            }
+
+            return (false, "Someone from the waiting list currently has priority to book. Please try again later.");
+        }
+
+        private async Task AdvanceWaitingListPositions(int tripId, int removedPosition)
+        {
+            var entriesToAdvance = await _context.WaitingListEntries
+                .Where(w => w.TripId == tripId &&
+                            w.Status == WaitingListStatus.Waiting &&
+                            w.Position > removedPosition)
+                .ToListAsync();
+
+            foreach (var entry in entriesToAdvance)
+            {
+                entry.Position--;
+            }
+        }
+
+        private async Task SendBookingConfirmationEmail(int bookingId)
+        {
+            try
+            {
+                var booking = await _context.Bookings
+                    .Include(b => b.Trip)
+                    .Include(b => b.User)
+                    .FirstOrDefaultAsync(b => b.BookingId == bookingId);
+
+                if (booking == null || booking.User == null || string.IsNullOrEmpty(booking.User.Email))
+                    return;
+
+                var userName = booking.User.FirstName ?? "Traveler";
+                var tripName = booking.Trip?.PackageName ?? "Your Trip";
+                var destination = booking.Trip?.Destination ?? "";
+                var country = booking.Trip?.Country ?? "";
+                var startDate = booking.Trip?.StartDate.ToString("MMMM dd, yyyy") ?? "";
+                var endDate = booking.Trip?.EndDate.ToString("MMMM dd, yyyy") ?? "";
+
+                var subject = $"Booking Confirmed - {tripName}";
+
+                var htmlBody = $@"
+                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+                    <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;'>
+                        <h1 style='color: white; margin: 0;'>Booking Confirmed!</h1>
+                    </div>
+                    
+                    <div style='padding: 30px; background: #f9f9f9;'>
+                        <p style='font-size: 18px;'>Hi {userName},</p>
+                        
+                        <p>Your booking has been confirmed! Here are the details:</p>
+                        
+                        <div style='background: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #667eea;'>
+                            <h2 style='color: #667eea; margin-top: 0;'>{tripName}</h2>
+                            <p><strong>Destination:</strong> {destination}, {country}</p>
+                            <p><strong>Dates:</strong> {startDate} - {endDate}</p>
+                            <p><strong>Rooms:</strong> {booking.NumberOfRooms}</p>
+                            <p><strong>Total Paid:</strong> ${booking.TotalPrice:N2}</p>
+                            <p><strong>Booking ID:</strong> #{booking.BookingId}</p>
+                        </div>
+                        
+                        <p>Your PDF itinerary is attached to this email.</p>
+                        
+                        <p style='color: #888; font-size: 14px;'>
+                            Best regards,<br>
+                            Travel Agency Team
+                        </p>
+                    </div>
+                    
+                    <div style='background: #333; color: white; padding: 20px; text-align: center;'>
+                        <p style='margin: 0;'>{DateTime.Now.Year} Travel Agency Service</p>
+                    </div>
+                </div>";
+
+                // Generate PDF
+                byte[]? pdfBytes = null;
+                try
+                {
+                    pdfBytes = _pdfService.GenerateItinerary(booking);
+                }
+                catch
+                {
+                    // Continue without PDF if generation fails
+                }
+
+                if (pdfBytes != null)
+                {
+                    var fileName = $"Itinerary_{tripName.Replace(" ", "_")}_{booking.BookingId}.pdf";
+                    await _emailSender.SendWithAttachmentAsync(
+                        booking.User.Email,
+                        subject,
+                        htmlBody,
+                        pdfBytes,
+                        fileName,
+                        "application/pdf"
+                    );
+                }
+                else
+                {
+                    await _emailSender.SendAsync(booking.User.Email, subject, htmlBody);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to send booking confirmation email: {ex.Message}");
+            }
+        }
+
+        #endregion
     }
 }

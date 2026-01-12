@@ -65,6 +65,8 @@ namespace TravelAgencyService.Models.ViewModels
         public bool IsInWaitingList { get; set; }
         public int WaitingListPosition { get; set; }
         public int WaitingListCount { get; set; }
+        public bool HasWaitingListPriority { get; set; }
+        public bool IsMyTurnToBook { get; set; }
     }
 
     public class TripImageViewModel

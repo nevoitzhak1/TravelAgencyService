@@ -48,9 +48,11 @@ namespace TravelAgencyService.Models.ViewModels
     {
         public List<UserBookingViewModel> UpcomingBookings { get; set; } = new();
         public List<UserBookingViewModel> PastBookings { get; set; } = new();
+        public List<WaitingListItemViewModel> WaitingListEntries { get; set; } = new();
         public int TotalBookings { get; set; }
         public bool ShowPastBookings { get; set; }
         public bool ShowCancelledBookings { get; set; }
+        public bool ShowWaitingList { get; set; }
     }
 
     public class UserBookingViewModel
