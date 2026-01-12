@@ -77,7 +77,7 @@ namespace TravelAgencyService.Controllers
                     viewModel.CanBeCancelled = daysUntilTrip >= booking.Trip.CancellationDaysLimit;
                 }
 
-                if (booking.Trip?.EndDate >= DateTime.Now && booking.Status != BookingStatus.Cancelled)
+                if (booking.Trip?.EndDate >= DateTime.Now && booking.Status == BookingStatus.Confirmed)
                 {
                     upcomingBookings.Add(viewModel);
                 }
@@ -259,78 +259,22 @@ namespace TravelAgencyService.Controllers
                 return RedirectToAction("Book", new { id = model.TripId });
             }
 
-            if (ModelState.IsValid)
+            if (!ModelState.IsValid)
             {
-                using var transaction = await _context.Database.BeginTransactionAsync();
-
-                try
-                {
-                    var tripToUpdate = await _context.Trips
-                        .FirstOrDefaultAsync(t => t.TripId == model.TripId);
-
-                    if (tripToUpdate == null || tripToUpdate.AvailableRooms < model.NumberOfRooms)
-                    {
-                        await transaction.RollbackAsync();
-                        TempData["Error"] = "Sorry, the rooms are no longer available. Someone else booked them.";
-                        return RedirectToAction("Details", "Trip", new { id = model.TripId });
-                    }
-
-                    var booking = new Booking
-                    {
-                        UserId = userId!,
-                        TripId = model.TripId,
-                        NumberOfRooms = model.NumberOfRooms,
-                        TotalPrice = trip.Price * model.NumberOfRooms,
-                        BookingDate = DateTime.Now,
-                        Status = BookingStatus.Pending,
-                        IsPaid = false,
-                        CreatedAt = DateTime.Now,
-                        UpdatedAt = DateTime.Now
-                    };
-
-                    tripToUpdate.AvailableRooms -= model.NumberOfRooms;
-                    tripToUpdate.TimesBooked++;
-                    tripToUpdate.UpdatedAt = DateTime.Now;
-
-                    // If user was in waiting list - update their status
-                    var userWaitingEntry = await _context.WaitingListEntries
-                        .FirstOrDefaultAsync(w => w.UserId == userId &&
-                                                  w.TripId == model.TripId &&
-                                                  (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified));
-
-                    if (userWaitingEntry != null)
-                    {
-                        var removedPosition = userWaitingEntry.Position;
-                        userWaitingEntry.Status = WaitingListStatus.Booked;
-
-                        // Advance all others
-                        await AdvanceWaitingListPositions(model.TripId, removedPosition);
-                    }
-
-                    _context.Bookings.Add(booking);
-                    await _context.SaveChangesAsync();
-                    await transaction.CommitAsync();
-
-                    return RedirectToAction("Checkout", "Payment", new { bookingId = booking.BookingId });
-                }
-                catch
-                {
-                    await transaction.RollbackAsync();
-                    TempData["Error"] = "An error occurred while processing your booking. Please try again.";
-                    return RedirectToAction("Book", new { id = model.TripId });
-                }
+                model.PackageName = trip.PackageName;
+                model.Destination = trip.Destination;
+                model.Country = trip.Country;
+                model.StartDate = trip.StartDate;
+                model.EndDate = trip.EndDate;
+                model.PricePerPerson = trip.Price;
+                model.AvailableRooms = trip.AvailableRooms;
+                model.MainImageUrl = trip.MainImageUrl;
+                return View(model);
             }
 
-            model.PackageName = trip.PackageName;
-            model.Destination = trip.Destination;
-            model.Country = trip.Country;
-            model.StartDate = trip.StartDate;
-            model.EndDate = trip.EndDate;
-            model.PricePerPerson = trip.Price;
-            model.AvailableRooms = trip.AvailableRooms;
-            model.MainImageUrl = trip.MainImageUrl;
-
-            return View(model);
+            // Simply redirect to Cart/Checkout - no booking created here
+            // The booking will be created during payment in CartController
+            return RedirectToAction("Checkout", "Cart", new { tripId = model.TripId, rooms = model.NumberOfRooms });
         }
 
         // GET: /Booking/Confirmation

@@ -183,10 +183,83 @@ namespace TravelAgencyService.Controllers
             return RedirectToAction("Index");
         }
 
-        public async Task<IActionResult> Checkout()
+        // GET: /Cart/Checkout OR /Cart/Checkout?tripId=5&rooms=1 (Single Trip)
+        public async Task<IActionResult> Checkout(int? tripId, int rooms = 1)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
+            // === SINGLE TRIP CHECKOUT (Buy Now) ===
+            if (tripId.HasValue)
+            {
+                var trip = await _context.Trips.FindAsync(tripId.Value);
+                if (trip == null || !trip.IsVisible)
+                {
+                    TempData["Error"] = "Trip not found.";
+                    return RedirectToAction("Index", "Trip");
+                }
+
+                if (trip.AvailableRooms < rooms)
+                {
+                    TempData["Error"] = "Sorry, the rooms are no longer available.";
+                    return RedirectToAction("Details", "Trip", new { id = tripId });
+                }
+
+                if (trip.StartDate <= DateTime.Now)
+                {
+                    TempData["Error"] = "This trip is no longer available.";
+                    return RedirectToAction("Details", "Trip", new { id = tripId });
+                }
+
+                // Check waiting list priority
+                var priorityCheck = await CheckWaitingListPriority(tripId.Value, userId!);
+                if (!priorityCheck.CanProceed)
+                {
+                    TempData["Error"] = priorityCheck.Message;
+                    return RedirectToAction("Details", "Trip", new { id = tripId });
+                }
+
+                // Check max bookings
+                var activeBookingsCount = await _context.Bookings
+                    .CountAsync(b => b.UserId == userId &&
+                                     b.Status == BookingStatus.Confirmed &&
+                                     b.Trip!.StartDate > DateTime.Now);
+
+                if (activeBookingsCount >= 3)
+                {
+                    TempData["Error"] = "You cannot have more than 3 upcoming trips booked.";
+                    return RedirectToAction("Details", "Trip", new { id = tripId });
+                }
+
+                var singleViewModel = new CartCheckoutViewModel
+                {
+                    IsSingleCheckout = true,
+                    SingleTripId = tripId.Value,
+                    SingleRooms = rooms,
+                    Items = new List<CartItemViewModel>
+                    {
+                        new CartItemViewModel
+                        {
+                            TripId = trip.TripId,
+                            PackageName = trip.PackageName,
+                            Destination = trip.Destination,
+                            Country = trip.Country,
+                            StartDate = trip.StartDate,
+                            EndDate = trip.EndDate,
+                            PricePerPerson = trip.Price,
+                            OriginalPrice = trip.OriginalPrice,
+                            IsOnSale = trip.IsOnSale,
+                            NumberOfRooms = rooms,
+                            MainImageUrl = trip.MainImageUrl,
+                            AvailableRooms = trip.AvailableRooms,
+                            IsStillAvailable = trip.AvailableRooms >= rooms && trip.StartDate > DateTime.Now
+                        }
+                    }
+                };
+
+                return View(singleViewModel);
+            }
+
+            // === CART CHECKOUT (existing logic) ===
             var cartItems = await _context.CartItems
                 .Include(c => c.Trip)
                 .Where(c => c.UserId == userId)
@@ -213,27 +286,28 @@ namespace TravelAgencyService.Controllers
             // Check waiting list priority for each item
             foreach (var item in cartItems)
             {
-                var priorityCheck = await CheckWaitingListPriority(item.TripId, userId!);
-                if (!priorityCheck.CanProceed)
+                var priorityCheck2 = await CheckWaitingListPriority(item.TripId, userId!);
+                if (!priorityCheck2.CanProceed)
                 {
-                    TempData["Error"] = $"'{item.Trip?.PackageName}': {priorityCheck.Message}";
+                    TempData["Error"] = $"'{item.Trip?.PackageName}': {priorityCheck2.Message}";
                     return RedirectToAction("Index");
                 }
             }
 
-            var activeBookingsCount = await _context.Bookings
+            var activeCount = await _context.Bookings
                 .CountAsync(b => b.UserId == userId &&
                                  b.Status == BookingStatus.Confirmed &&
                                  b.Trip!.StartDate > DateTime.Now);
 
-            if (activeBookingsCount + cartItems.Count > 3)
+            if (activeCount + cartItems.Count > 3)
             {
-                TempData["Error"] = $"You can only have 3 active bookings. You currently have {activeBookingsCount}.";
+                TempData["Error"] = $"You can only have 3 active bookings. You currently have {activeCount}.";
                 return RedirectToAction("Index");
             }
 
             var viewModel = new CartCheckoutViewModel
             {
+                IsSingleCheckout = false,
                 Items = cartItems.Select(c => new CartItemViewModel
                 {
                     CartItemId = c.CartItemId,
@@ -258,6 +332,114 @@ namespace TravelAgencyService.Controllers
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
+            // === SINGLE TRIP CHECKOUT (Buy Now) ===
+            if (model.IsSingleCheckout && model.SingleTripId.HasValue && model.SingleRooms.HasValue)
+            {
+                var trip = await _context.Trips.FindAsync(model.SingleTripId.Value);
+                if (trip == null || !trip.IsVisible)
+                {
+                    TempData["Error"] = "Trip not found.";
+                    return RedirectToAction("Index", "Trip");
+                }
+
+                if (trip.AvailableRooms < model.SingleRooms.Value)
+                {
+                    TempData["Error"] = "Sorry, the rooms are no longer available.";
+                    return RedirectToAction("Details", "Trip", new { id = trip.TripId });
+                }
+
+                // Validate expiry date
+                var currentDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+                var expiryDate = new DateTime(model.ExpiryYear, model.ExpiryMonth, 1);
+
+                if (expiryDate < currentDate)
+                {
+                    ModelState.AddModelError("ExpiryMonth", "Card has expired");
+                }
+
+                if (!ModelState.IsValid)
+                {
+                    model.Items = new List<CartItemViewModel>
+                    {
+                        new CartItemViewModel
+                        {
+                            TripId = trip.TripId,
+                            PackageName = trip.PackageName,
+                            Destination = trip.Destination,
+                            Country = trip.Country,
+                            StartDate = trip.StartDate,
+                            EndDate = trip.EndDate,
+                            PricePerPerson = trip.Price,
+                            OriginalPrice = trip.OriginalPrice,
+                            IsOnSale = trip.IsOnSale,
+                            NumberOfRooms = model.SingleRooms.Value,
+                            MainImageUrl = trip.MainImageUrl,
+                            AvailableRooms = trip.AvailableRooms,
+                            IsStillAvailable = trip.AvailableRooms >= model.SingleRooms.Value && trip.StartDate > DateTime.Now
+                        }
+                    };
+                    return View(model);
+                }
+
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    // Burn inventory + create booking paid
+                    trip.AvailableRooms -= model.SingleRooms.Value;
+                    trip.TimesBooked++;
+                    trip.UpdatedAt = DateTime.Now;
+
+                    var cardLastFour = model.CardNumber.Length >= 4
+                        ? model.CardNumber.Substring(model.CardNumber.Length - 4)
+                        : model.CardNumber;
+
+                    var booking = new Booking
+                    {
+                        UserId = userId!,
+                        TripId = trip.TripId,
+                        NumberOfRooms = model.SingleRooms.Value,
+                        TotalPrice = trip.Price * model.SingleRooms.Value,
+                        BookingDate = DateTime.Now,
+                        Status = BookingStatus.Confirmed,
+                        IsPaid = true,
+                        PaymentDate = DateTime.Now,
+                        CardLastFourDigits = cardLastFour,
+                        CreatedAt = DateTime.Now,
+                        UpdatedAt = DateTime.Now
+                    };
+
+                    // Update waiting list if user was in it
+                    var userWaitingEntry = await _context.WaitingListEntries
+                        .FirstOrDefaultAsync(w => w.UserId == userId &&
+                                                  w.TripId == trip.TripId &&
+                                                  (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified));
+
+                    if (userWaitingEntry != null)
+                    {
+                        var removedPosition = userWaitingEntry.Position;
+                        userWaitingEntry.Status = WaitingListStatus.Booked;
+                        await AdvanceWaitingListPositions(trip.TripId, removedPosition);
+                    }
+
+                    _context.Bookings.Add(booking);
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    // Send confirmation email
+                    await SendBookingConfirmationEmail(booking.BookingId);
+
+                    TempData["Success"] = "Payment successful! Your booking is confirmed.";
+                    return RedirectToAction("Confirmation", "Booking", new { id = booking.BookingId });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    TempData["Error"] = "Payment failed. Please try again.";
+                    return RedirectToAction("Checkout", "Cart", new { tripId = model.SingleTripId, rooms = model.SingleRooms });
+                }
+            }
+
+            // === CART CHECKOUT (existing logic) ===
             var cartItems = await _context.CartItems
                 .Include(c => c.Trip)
                 .Where(c => c.UserId == userId)
@@ -280,10 +462,10 @@ namespace TravelAgencyService.Controllers
                 }
             }
 
-            var currentDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
-            var expiryDate = new DateTime(model.ExpiryYear, model.ExpiryMonth, 1);
+            var currentDate2 = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+            var expiryDate2 = new DateTime(model.ExpiryYear, model.ExpiryMonth, 1);
 
-            if (expiryDate < currentDate)
+            if (expiryDate2 < currentDate2)
             {
                 ModelState.AddModelError("ExpiryMonth", "Card has expired");
             }
@@ -372,7 +554,6 @@ namespace TravelAgencyService.Controllers
                     TempData["Error"] = "An error occurred while processing your payment.";
                     return RedirectToAction("Index");
                 }
-
             }
 
             model.Items = cartItems.Select(c => new CartItemViewModel
@@ -392,6 +573,7 @@ namespace TravelAgencyService.Controllers
             return View(model);
         }
 
+        // GET: /Cart/BuyNow/5 - Redirects to Single Checkout
         public async Task<IActionResult> BuyNow(int id, int rooms = 1)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -434,156 +616,18 @@ namespace TravelAgencyService.Controllers
                 return RedirectToAction("Details", "Trip", new { id });
             }
 
-            var viewModel = new BuyNowViewModel
-            {
-                TripId = trip.TripId,
-                PackageName = trip.PackageName,
-                Destination = trip.Destination,
-                Country = trip.Country,
-                StartDate = trip.StartDate,
-                EndDate = trip.EndDate,
-                PricePerRoom = trip.Price,
-                OriginalPrice = trip.OriginalPrice,
-                IsOnSale = trip.IsOnSale,
-                AvailableRooms = trip.AvailableRooms,
-                MainImageUrl = trip.MainImageUrl,
-                NumberOfRooms = Math.Min(rooms, trip.AvailableRooms)
-            };
-
-            return View(viewModel);
+            // Redirect directly to Checkout with tripId (Single Checkout)
+            return RedirectToAction("Checkout", "Cart", new { tripId = id, rooms = Math.Min(rooms, trip.AvailableRooms) });
         }
 
+        // POST: BuyNow is no longer needed - we use Checkout POST for single trips
+        // Keeping it for backward compatibility but it redirects
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> BuyNow(BuyNowViewModel model)
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-            // Check waiting list priority before processing
-            var priorityCheck = await CheckWaitingListPriority(model.TripId, userId!);
-            if (!priorityCheck.CanProceed)
-            {
-                TempData["Error"] = priorityCheck.Message;
-                return RedirectToAction("Details", "Trip", new { id = model.TripId });
-            }
-
-            var currentDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
-            var expiryDate = new DateTime(model.ExpiryYear, model.ExpiryMonth, 1);
-
-            if (expiryDate < currentDate)
-            {
-                ModelState.AddModelError("ExpiryMonth", "Card has expired");
-            }
-
-            if (!string.IsNullOrEmpty(model.CardNumber))
-            {
-                model.CardNumber = model.CardNumber.Replace(" ", "");
-            }
-
-            if (ModelState.IsValid)
-            {
-                using var transaction = await _context.Database.BeginTransactionAsync();
-
-                try
-                {
-                    var trip = await _context.Trips.FindAsync(model.TripId);
-
-                    if (trip == null)
-                    {
-                        await transaction.RollbackAsync();
-                        TempData["Error"] = "Trip not found.";
-                        return RedirectToAction("Index", "Trip");
-                    }
-
-                    if (trip.AvailableRooms < model.NumberOfRooms)
-                    {
-                        await transaction.RollbackAsync();
-                        TempData["Error"] = $"Sorry, only {trip.AvailableRooms} room(s) available. Someone else booked while you were checking out.";
-                        return RedirectToAction("Details", "Trip", new { id = model.TripId });
-                    }
-
-                    var activeBookingsCount = await _context.Bookings
-                        .CountAsync(b => b.UserId == userId &&
-                                         b.Status == BookingStatus.Confirmed &&
-                                         b.Trip!.StartDate > DateTime.Now);
-
-                    if (activeBookingsCount >= 3)
-                    {
-                        await transaction.RollbackAsync();
-                        TempData["Error"] = "You cannot have more than 3 upcoming trips booked.";
-                        return RedirectToAction("Details", "Trip", new { id = model.TripId });
-                    }
-
-                    var cardLastFour = model.CardNumber.Length >= 4
-                        ? model.CardNumber.Substring(model.CardNumber.Length - 4)
-                        : model.CardNumber;
-
-                    var booking = new Booking
-                    {
-                        UserId = userId!,
-                        TripId = model.TripId,
-                        NumberOfRooms = model.NumberOfRooms,
-                        TotalPrice = trip.Price * model.NumberOfRooms,
-                        BookingDate = DateTime.Now,
-                        Status = BookingStatus.Confirmed,
-                        IsPaid = true,
-                        PaymentDate = DateTime.Now,
-                        CardLastFourDigits = cardLastFour,
-                        CreatedAt = DateTime.Now,
-                        UpdatedAt = DateTime.Now
-                    };
-
-                    trip.AvailableRooms -= model.NumberOfRooms;
-                    trip.TimesBooked++;
-                    trip.UpdatedAt = DateTime.Now;
-
-                    // Update waiting list if user was in it
-                    var userWaitingEntry = await _context.WaitingListEntries
-                        .FirstOrDefaultAsync(w => w.UserId == userId &&
-                                                  w.TripId == model.TripId &&
-                                                  (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified));
-
-                    if (userWaitingEntry != null)
-                    {
-                        var removedPosition = userWaitingEntry.Position;
-                        userWaitingEntry.Status = WaitingListStatus.Booked;
-                        await AdvanceWaitingListPositions(model.TripId, removedPosition);
-                    }
-
-                    _context.Bookings.Add(booking);
-                    await _context.SaveChangesAsync();
-                    await transaction.CommitAsync();
-
-                    // Send confirmation email with PDF
-                    await SendBookingConfirmationEmail(booking.BookingId);
-
-                    TempData["Success"] = "Payment successful! Your booking is confirmed.";
-                    return RedirectToAction("Confirmation", "Booking", new { id = booking.BookingId });
-                }
-                catch
-                {
-                    await transaction.RollbackAsync();
-                    TempData["Error"] = "An error occurred. Please try again.";
-                    return RedirectToAction("Details", "Trip", new { id = model.TripId });
-                }
-            }
-
-            var tripData = await _context.Trips.FindAsync(model.TripId);
-            if (tripData != null)
-            {
-                model.PackageName = tripData.PackageName;
-                model.Destination = tripData.Destination;
-                model.Country = tripData.Country;
-                model.StartDate = tripData.StartDate;
-                model.EndDate = tripData.EndDate;
-                model.PricePerRoom = tripData.Price;
-                model.OriginalPrice = tripData.OriginalPrice;
-                model.IsOnSale = tripData.IsOnSale;
-                model.AvailableRooms = tripData.AvailableRooms;
-                model.MainImageUrl = tripData.MainImageUrl;
-            }
-
-            return View(model);
+            // Redirect to the new unified checkout
+            return RedirectToAction("Checkout", "Cart", new { tripId = model.TripId, rooms = model.NumberOfRooms });
         }
 
         #region Helper Methods

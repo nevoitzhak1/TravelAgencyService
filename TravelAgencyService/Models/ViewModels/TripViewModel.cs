@@ -28,6 +28,8 @@ namespace TravelAgencyService.Models.ViewModels
         public double AverageRating { get; set; }
         public int ReviewCount { get; set; }
         public int TimesBooked { get; set; }
+
+        public bool HasPeopleInWaitingList { get; set; }
     }
 
     public class TripListViewModel

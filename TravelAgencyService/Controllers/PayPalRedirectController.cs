@@ -30,6 +30,7 @@ public class PayPalRedirectController : Controller
         _pdfService = pdfService;
     }
 
+    // POST: Start PayPal payment from Cart
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> StartFromCart(CancellationToken ct)
@@ -112,13 +113,14 @@ public class PayPalRedirectController : Controller
         {
             await tx.RollbackAsync(ct);
             TempData["Error"] = "Could not start PayPal payment.";
-            return RedirectToAction("Checkout", "Cart");
+            return RedirectToAction("Index", "Cart");
         }
 
         var bookingIdsCsv = string.Join(",", bookingIds);
 
-        var returnUrl = Url.Action("Return", "PayPalRedirect", new { bookingIds = bookingIdsCsv }, Request.Scheme)!;
-        var cancelUrl = Url.Action("Cancel", "PayPalRedirect", new { bookingIds = bookingIdsCsv }, Request.Scheme)!;
+        // Added source = "cart" parameter
+        var returnUrl = Url.Action("Return", "PayPalRedirect", new { bookingIds = bookingIdsCsv, source = "cart" }, Request.Scheme)!;
+        var cancelUrl = Url.Action("Cancel", "PayPalRedirect", new { bookingIds = bookingIdsCsv, source = "cart" }, Request.Scheme)!;
 
         var currency = "USD";
         var (_, approveUrl) = await _pp.CreateOrderAndGetApproveUrlAsync(total, currency, returnUrl, cancelUrl, ct);
@@ -126,15 +128,94 @@ public class PayPalRedirectController : Controller
         return Redirect(approveUrl);
     }
 
+    // POST: Start PayPal payment for Single Trip (Buy Now)
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> StartSingle(int tripId, int rooms, CancellationToken ct)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId))
+            return RedirectToAction("Login", "Account");
+
+        var trip = await _context.Trips.FindAsync(new object[] { tripId }, ct);
+        if (trip == null || !trip.IsVisible || trip.StartDate <= DateTime.Now || rooms < 1 || trip.AvailableRooms < rooms)
+        {
+            TempData["Error"] = "Trip is not available.";
+            return RedirectToAction("Details", "Trip", new { id = tripId });
+        }
+
+        // Check waiting list priority
+        var priorityCheck = await CheckWaitingListPriority(tripId, userId);
+        if (!priorityCheck.CanProceed)
+        {
+            TempData["Error"] = priorityCheck.Message;
+            return RedirectToAction("Details", "Trip", new { id = tripId });
+        }
+
+        // Check max bookings
+        var activeBookingsCount = await _context.Bookings
+            .CountAsync(b => b.UserId == userId &&
+                             b.Status == BookingStatus.Confirmed &&
+                             b.Trip!.StartDate > DateTime.Now, ct);
+
+        if (activeBookingsCount >= 3)
+        {
+            TempData["Error"] = "You cannot have more than 3 upcoming trips booked.";
+            return RedirectToAction("Details", "Trip", new { id = tripId });
+        }
+
+        // Create a Pending booking
+        using var tx = await _context.Database.BeginTransactionAsync(ct);
+        try
+        {
+            var booking = new Booking
+            {
+                UserId = userId!,
+                TripId = tripId,
+                NumberOfRooms = rooms,
+                TotalPrice = trip.Price * rooms,
+                BookingDate = DateTime.Now,
+                Status = BookingStatus.Pending,
+                IsPaid = false,
+                PaymentDate = null,
+                CardLastFourDigits = null,
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
+
+            _context.Bookings.Add(booking);
+            await _context.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+
+            var bookingIdsCsv = booking.BookingId.ToString();
+
+            // source = "single" for single trip
+            var returnUrl = Url.Action("Return", "PayPalRedirect", new { bookingIds = bookingIdsCsv, source = "single" }, Request.Scheme)!;
+            var cancelUrl = Url.Action("Cancel", "PayPalRedirect", new { bookingIds = bookingIdsCsv, source = "single" }, Request.Scheme)!;
+
+            var currency = "USD";
+            var total = trip.Price * rooms;
+            var (_, approveUrl) = await _pp.CreateOrderAndGetApproveUrlAsync(total, currency, returnUrl, cancelUrl, ct);
+
+            return Redirect(approveUrl);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            TempData["Error"] = "Could not start PayPal payment.";
+            return RedirectToAction("Checkout", "Cart", new { tripId, rooms });
+        }
+    }
+
     [HttpGet]
-    public async Task<IActionResult> Return(string bookingIds, string token, CancellationToken ct)
+    public async Task<IActionResult> Return(string bookingIds, string token, string? source, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(bookingIds))
             return BadRequest("Missing parameters.");
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId))
-            return RedirectToAction("Login", "Account", new { returnUrl = $"/PayPalRedirect/Return?bookingIds={bookingIds}&token={token}" });
+            return RedirectToAction("Login", "Account", new { returnUrl = $"/PayPalRedirect/Return?bookingIds={bookingIds}&token={token}&source={source}" });
 
         var capture = await _pp.CaptureOrderAsync(token, ct);
         var status = capture.GetProperty("status").GetString();
@@ -194,8 +275,12 @@ public class PayPalRedirectController : Controller
                 }
             }
 
-            var cartItems = await _context.CartItems.Where(c => c.UserId == userId).ToListAsync(ct);
-            _context.CartItems.RemoveRange(cartItems);
+            // Only clear cart if source is "cart"
+            if (source == "cart")
+            {
+                var cartItems = await _context.CartItems.Where(c => c.UserId == userId).ToListAsync(ct);
+                _context.CartItems.RemoveRange(cartItems);
+            }
 
             await _context.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
@@ -207,6 +292,13 @@ public class PayPalRedirectController : Controller
             }
 
             TempData["Success"] = $"PayPal payment successful! {bookings.Count} booking(s) confirmed.";
+
+            // Redirect based on source
+            if (source == "single" && bookings.Count == 1)
+            {
+                return RedirectToAction("Confirmation", "Booking", new { id = bookings[0].BookingId });
+            }
+
             return RedirectToAction("MyBookings", "Booking");
         }
         catch
@@ -218,7 +310,7 @@ public class PayPalRedirectController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> Cancel(string bookingIds, CancellationToken ct)
+    public async Task<IActionResult> Cancel(string bookingIds, string? source, CancellationToken ct)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
@@ -235,6 +327,13 @@ public class PayPalRedirectController : Controller
         }
 
         TempData["Error"] = "PayPal payment was canceled.";
+
+        // Redirect based on source
+        if (source == "single")
+        {
+            return RedirectToAction("Index", "Trip");
+        }
+
         return RedirectToAction("Checkout", "Cart");
     }
 

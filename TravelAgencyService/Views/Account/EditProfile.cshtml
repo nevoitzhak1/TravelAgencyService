@@ -1,0 +1,162 @@
+﻿@model TravelAgencyService.Models.ViewModels.EditProfileViewModel
+@{
+    ViewData["Title"] = "Edit Profile";
+}
+
+<style>
+    .edit-profile-card {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+
+    .edit-profile-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 30px;
+        color: white;
+    }
+
+        .edit-profile-header h2 {
+            margin: 0;
+            font-weight: 600;
+        }
+
+    .edit-profile-body {
+        padding: 40px;
+    }
+
+    .form-label {
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 8px;
+    }
+
+    .form-control {
+        border-radius: 10px;
+        padding: 12px 16px;
+        border: 2px solid #e9ecef;
+        transition: all 0.3s ease;
+    }
+
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+        }
+
+    .btn-save {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        padding: 14px 40px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 1.1rem;
+        transition: all 0.3s ease;
+    }
+
+        .btn-save:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+    .btn-cancel {
+        padding: 14px 40px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+
+    .input-icon {
+        position: relative;
+    }
+
+        .input-icon i {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #6c757d;
+        }
+
+        .input-icon .form-control {
+            padding-left: 45px;
+        }
+</style>
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="edit-profile-card">
+                <div class="edit-profile-header">
+                    <h2><i class="bi bi-pencil-square me-2"></i>Edit Profile</h2>
+                    <p class="mb-0 opacity-75">Update your personal information</p>
+                </div>
+                <div class="edit-profile-body">
+                    <form asp-action="EditProfile" method="post">
+                        <div asp-validation-summary="ModelOnly" class="alert alert-danger mb-4"></div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-4">
+                                <label asp-for="FirstName" class="form-label">
+                                    <i class="bi bi-person me-1"></i>First Name
+                                </label>
+                                <div class="input-icon">
+                                    <i class="bi bi-person"></i>
+                                    <input asp-for="FirstName" class="form-control" placeholder="Enter your first name" />
+                                </div>
+                                <span asp-validation-for="FirstName" class="text-danger small"></span>
+                            </div>
+                            <div class="col-md-6 mb-4">
+                                <label asp-for="LastName" class="form-label">
+                                    <i class="bi bi-person me-1"></i>Last Name
+                                </label>
+                                <div class="input-icon">
+                                    <i class="bi bi-person"></i>
+                                    <input asp-for="LastName" class="form-control" placeholder="Enter your last name" />
+                                </div>
+                                <span asp-validation-for="LastName" class="text-danger small"></span>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label asp-for="DateOfBirth" class="form-label">
+                                <i class="bi bi-calendar me-1"></i>Date of Birth
+                            </label>
+                            <div class="input-icon">
+                                <i class="bi bi-calendar"></i>
+                                <input asp-for="DateOfBirth" type="date" class="form-control" />
+                            </div>
+                            <span asp-validation-for="DateOfBirth" class="text-danger small"></span>
+                        </div>
+
+                        <div class="mb-4">
+                            <label asp-for="Address" class="form-label">
+                                <i class="bi bi-geo-alt me-1"></i>Address
+                            </label>
+                            <div class="input-icon">
+                                <i class="bi bi-geo-alt"></i>
+                                <input asp-for="Address" class="form-control" placeholder="Enter your address" />
+                            </div>
+                            <span asp-validation-for="Address" class="text-danger small"></span>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <div class="d-flex gap-3 justify-content-end">
+                            <a asp-action="Profile" class="btn btn-outline-secondary btn-cancel">
+                                <i class="bi bi-x-lg me-2"></i>Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary btn-save">
+                                <i class="bi bi-check-lg me-2"></i>Save Changes
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

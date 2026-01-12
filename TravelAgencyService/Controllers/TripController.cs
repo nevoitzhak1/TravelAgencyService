@@ -32,6 +32,7 @@ namespace TravelAgencyService.Controllers
         {
             var query = _context.Trips
                 .Include(t => t.Reviews)
+                .Include(t => t.WaitingList)  // Added this
                 .Where(t => t.IsVisible && t.StartDate > DateTime.Now)
                 .AsQueryable();
 
@@ -137,7 +138,10 @@ namespace TravelAgencyService.Controllers
                         ? Math.Round(t.Reviews.Average(r => r.Rating), 1)
                         : 0,
                     ReviewCount = t.Reviews != null ? t.Reviews.Count : 0,
-                    TimesBooked = t.TimesBooked
+                    TimesBooked = t.TimesBooked,
+                    // NEW: Check if there are people in waiting list
+                    HasPeopleInWaitingList = t.WaitingList != null &&
+                        t.WaitingList.Any(w => w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified)
                 })
                 .ToListAsync();
 
@@ -246,7 +250,7 @@ namespace TravelAgencyService.Controllers
             bool isInCart = false;
             bool isInWaitingList = false;
             int waitingListPosition = 0;
-            int waitingListCount = trip.WaitingList?.Count(w => w.Status == WaitingListStatus.Waiting) ?? 0;
+            int waitingListCount = trip.WaitingList?.Count(w => w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified) ?? 0;
 
             if (User.Identity?.IsAuthenticated == true)
             {

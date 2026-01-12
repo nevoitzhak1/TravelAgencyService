@@ -126,13 +126,7 @@
                                             }
 
                                             <div class="btn-group btn-group-sm">
-                                                @if (booking.Status == TravelAgencyService.Models.BookingStatus.Pending)
-                                                {
-                                                    <a asp-controller="Payment" asp-action="Checkout" asp-route-bookingId="@booking.BookingId"
-                                                       class="btn btn-primary">
-                                                        <i class="bi bi-credit-card"></i> Pay Now
-                                                    </a>
-                                                }
+                                                
                                                 @if (booking.IsPaid)
                                                 {
                                                     <a asp-action="DownloadItinerary" asp-route-id="@booking.BookingId"

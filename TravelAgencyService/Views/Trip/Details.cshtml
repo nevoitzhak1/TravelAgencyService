@@ -184,7 +184,7 @@
                     </ul>
 
                     <!-- Waiting List Info -->
-                    @if (Model.Trip.IsFullyBooked && Model.WaitingListCount > 0)
+                    @if (Model.WaitingListCount > 0)
                     {
                         <div class="alert alert-warning">
                             <i class="bi bi-hourglass-split"></i>
@@ -206,18 +206,20 @@
                         {
                             @if (Model.IsMyTurnToBook)
                             {
-                                <!-- User's turn from waiting list -->
+                                <!-- User's turn from waiting list - go directly to Cart/Checkout -->
                                 <div class="alert alert-success">
                                     <i class="bi bi-check-circle"></i>
                                     <strong>It's your turn!</strong> You have 24 hours to complete your booking.
                                 </div>
-                                <a asp-controller="Booking" asp-action="Book" asp-route-id="@Model.Trip.TripId"
+                                <a asp-controller="Cart" asp-action="Checkout"
+                                   asp-route-tripId="@Model.Trip.TripId" asp-route-rooms="1"
                                    class="btn btn-success btn-lg">
                                     <i class="bi bi-calendar-plus"></i> Book Now - Your Turn!
                                 </a>
                             }
-                            else if (!Model.Trip.IsFullyBooked && !Model.HasWaitingListPriority)
+                            else if (!Model.Trip.IsFullyBooked && !Model.HasWaitingListPriority && Model.WaitingListCount == 0)
                             {
+                                @* Show booking buttons ONLY if rooms available AND no one in waiting list *@
                                 @if (Model.CanBook)
                                 {
                                     @if (Model.IsInCart)
@@ -231,10 +233,6 @@
                                         <a asp-controller="Cart" asp-action="BuyNow" asp-route-id="@Model.Trip.TripId"
                                            class="btn btn-success btn-lg">
                                             <i class="bi bi-lightning"></i> Buy Now
-                                        </a>
-                                        <a asp-controller="Booking" asp-action="Book" asp-route-id="@Model.Trip.TripId"
-                                           class="btn btn-primary btn-lg">
-                                            <i class="bi bi-calendar-plus"></i> Book Now
                                         </a>
                                         <a asp-controller="Cart" asp-action="Add" asp-route-id="@Model.Trip.TripId"
                                            class="btn btn-outline-primary btn-lg">
@@ -252,7 +250,7 @@
                             }
                             else if (Model.HasWaitingListPriority)
                             {
-                                <!-- Someone from waiting list has priority -->
+                                <!-- Someone from waiting list has priority (24h window) -->
                                 <div class="alert alert-info">
                                     <i class="bi bi-hourglass-split"></i>
                                     Someone from the waiting list has priority to book. Please check back later.
@@ -274,7 +272,7 @@
                             }
                             else
                             {
-                                <!-- Fully booked -->
+                                <!-- Fully booked OR there are people in waiting list - show Join Waiting List -->
                                 @if (!Model.IsInWaitingList)
                                 {
                                     <a asp-controller="Booking" asp-action="JoinWaitingList" asp-route-id="@Model.Trip.TripId"

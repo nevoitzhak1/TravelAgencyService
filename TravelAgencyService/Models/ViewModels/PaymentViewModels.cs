@@ -84,6 +84,11 @@ namespace TravelAgencyService.Models.ViewModels
         public List<CartItemViewModel> Items { get; set; } = new();
         public decimal TotalPrice => Items.Sum(i => i.TotalPrice);
 
+        // For Single Trip Checkout (Buy Now)
+        public bool IsSingleCheckout { get; set; } = false;
+        public int? SingleTripId { get; set; }
+        public int? SingleRooms { get; set; }
+
         [Required(ErrorMessage = "Cardholder name is required")]
         [StringLength(100)]
         [Display(Name = "Cardholder Name")]

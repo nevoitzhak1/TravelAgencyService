@@ -1,5 +1,8 @@
-﻿using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using TravelAgencyService.Data;
 using TravelAgencyService.Models;
 using TravelAgencyService.Models.ViewModels;
 
@@ -9,11 +12,16 @@ namespace TravelAgencyService.Controllers
     {
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly SignInManager<ApplicationUser> _signInManager;
+        private readonly ApplicationDbContext _context;
 
-        public AccountController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager)
+        public AccountController(
+            UserManager<ApplicationUser> userManager,
+            SignInManager<ApplicationUser> signInManager,
+            ApplicationDbContext context)
         {
             _userManager = userManager;
             _signInManager = signInManager;
+            _context = context;
         }
 
         // GET: /Account/Register
@@ -140,6 +148,155 @@ namespace TravelAgencyService.Controllers
         public IActionResult AccessDenied()
         {
             return View();
+        }
+
+        // GET: /Account/Profile
+        [Authorize]
+        [HttpGet]
+        public async Task<IActionResult> Profile()
+        {
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null)
+            {
+                return RedirectToAction("Login");
+            }
+
+            var totalBookings = await _context.Bookings
+                .CountAsync(b => b.UserId == user.Id && b.Status != BookingStatus.Cancelled);
+
+            var completedTrips = await _context.Bookings
+                .CountAsync(b => b.UserId == user.Id &&
+                                b.Status == BookingStatus.Confirmed &&
+                                b.Trip != null &&
+                                b.Trip.EndDate < DateTime.Now);
+
+            var upcomingTrips = await _context.Bookings
+                .CountAsync(b => b.UserId == user.Id &&
+                                b.Status == BookingStatus.Confirmed &&
+                                b.Trip != null &&
+                                b.Trip.StartDate > DateTime.Now);
+
+            var totalReviews = await _context.Reviews
+                .CountAsync(r => r.UserId == user.Id);
+
+            var viewModel = new ProfileViewModel
+            {
+                Id = user.Id,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                Email = user.Email ?? "",
+                DateOfBirth = user.DateOfBirth,
+                Address = user.Address,
+                RegistrationDate = user.RegistrationDate,
+                TotalBookings = totalBookings,
+                CompletedTrips = completedTrips,
+                UpcomingTrips = upcomingTrips,
+                TotalReviews = totalReviews
+            };
+
+            return View(viewModel);
+        }
+
+        // GET: /Account/EditProfile
+        [Authorize]
+        [HttpGet]
+        public async Task<IActionResult> EditProfile()
+        {
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null)
+            {
+                return RedirectToAction("Login");
+            }
+
+            var viewModel = new EditProfileViewModel
+            {
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                DateOfBirth = user.DateOfBirth,
+                Address = user.Address
+            };
+
+            return View(viewModel);
+        }
+
+        // POST: /Account/EditProfile
+        [Authorize]
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditProfile(EditProfileViewModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
+
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null)
+            {
+                return RedirectToAction("Login");
+            }
+
+            user.FirstName = model.FirstName;
+            user.LastName = model.LastName;
+            user.DateOfBirth = model.DateOfBirth;
+            user.Address = model.Address;
+
+            var result = await _userManager.UpdateAsync(user);
+
+            if (result.Succeeded)
+            {
+                TempData["SuccessMessage"] = "Your profile has been updated successfully!";
+                return RedirectToAction("Profile");
+            }
+
+            foreach (var error in result.Errors)
+            {
+                ModelState.AddModelError(string.Empty, error.Description);
+            }
+
+            return View(model);
+        }
+
+        // GET: /Account/ChangePassword
+        [Authorize]
+        [HttpGet]
+        public IActionResult ChangePassword()
+        {
+            return View();
+        }
+
+        // POST: /Account/ChangePassword
+        [Authorize]
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ChangePassword(ChangePasswordViewModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
+
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null)
+            {
+                return RedirectToAction("Login");
+            }
+
+            var result = await _userManager.ChangePasswordAsync(user, model.CurrentPassword, model.NewPassword);
+
+            if (result.Succeeded)
+            {
+                await _signInManager.RefreshSignInAsync(user);
+                TempData["SuccessMessage"] = "Your password has been changed successfully!";
+                return RedirectToAction("Profile");
+            }
+
+            foreach (var error in result.Errors)
+            {
+                ModelState.AddModelError(string.Empty, error.Description);
+            }
+
+            return View(model);
         }
     }
 }
