@@ -88,6 +88,16 @@ namespace TravelAgencyService.Controllers
                 return RedirectToAction("Details", "Trip", new { id });
             }
 
+            // ========== AGE RESTRICTION CHECK ==========
+            var ageCheck = await CheckAgeRestriction(trip, userId!);
+            if (!ageCheck.IsAllowed)
+            {
+                TempData["Error"] = ageCheck.ErrorMessage;
+                return RedirectToAction("Index", "Trip");  // חזרה לגלריה
+            }
+            // ===========================================
+            // ===========================================
+
             // Check waiting list priority
             var priorityCheck = await CheckWaitingListPriority(id, userId!);
             if (!priorityCheck.CanProceed)
@@ -210,6 +220,15 @@ namespace TravelAgencyService.Controllers
                     return RedirectToAction("Details", "Trip", new { id = tripId });
                 }
 
+                // ========== AGE RESTRICTION CHECK ==========
+                var ageCheck = await CheckAgeRestriction(trip, userId!);
+                if (!ageCheck.IsAllowed)
+                {
+                    TempData["Error"] = ageCheck.ErrorMessage;
+                    return RedirectToAction("Details", "Trip", new { id = tripId });
+                }
+                // ===========================================
+
                 // Check waiting list priority
                 var priorityCheck = await CheckWaitingListPriority(tripId.Value, userId!);
                 if (!priorityCheck.CanProceed)
@@ -283,6 +302,21 @@ namespace TravelAgencyService.Controllers
                 return RedirectToAction("Index");
             }
 
+            // ========== AGE RESTRICTION CHECK FOR CART ITEMS ==========
+            foreach (var item in cartItems)
+            {
+                if (item.Trip != null)
+                {
+                    var ageCheck = await CheckAgeRestriction(item.Trip, userId!);
+                    if (!ageCheck.IsAllowed)
+                    {
+                        TempData["Error"] = $"'{item.Trip.PackageName}': {ageCheck.ErrorMessage}";
+                        return RedirectToAction("Index");
+                    }
+                }
+            }
+            // ==========================================================
+
             // Check waiting list priority for each item
             foreach (var item in cartItems)
             {
@@ -347,6 +381,16 @@ namespace TravelAgencyService.Controllers
                     TempData["Error"] = "Sorry, the rooms are no longer available.";
                     return RedirectToAction("Details", "Trip", new { id = trip.TripId });
                 }
+
+                // ========== AGE RESTRICTION CHECK ==========
+                var ageCheck = await CheckAgeRestriction(trip, userId!);
+                if (!ageCheck.IsAllowed)
+                {
+                    TempData["Error"] = ageCheck.ErrorMessage;
+                    return RedirectToAction("Index", "Trip");  // חזרה לגלריה
+                }
+                // ===========================================
+                // ===========================================
 
                 // Validate expiry date
                 var currentDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
@@ -450,6 +494,21 @@ namespace TravelAgencyService.Controllers
                 TempData["Error"] = "Your cart is empty.";
                 return RedirectToAction("Index");
             }
+
+            // ========== AGE RESTRICTION CHECK FOR CART ITEMS ==========
+            foreach (var item in cartItems)
+            {
+                if (item.Trip != null)
+                {
+                    var ageCheck = await CheckAgeRestriction(item.Trip, userId!);
+                    if (!ageCheck.IsAllowed)
+                    {
+                        TempData["Error"] = $"'{item.Trip.PackageName}': {ageCheck.ErrorMessage}";
+                        return RedirectToAction("Index");
+                    }
+                }
+            }
+            // ==========================================================
 
             // Check waiting list priority for each item before processing
             foreach (var item in cartItems)
@@ -608,6 +667,15 @@ namespace TravelAgencyService.Controllers
                 return RedirectToAction("JoinWaitingList", "Booking", new { id });
             }
 
+            // ========== AGE RESTRICTION CHECK ==========
+            var ageCheck = await CheckAgeRestriction(trip, userId!);
+            if (!ageCheck.IsAllowed)
+            {
+                TempData["Error"] = ageCheck.ErrorMessage;
+                return RedirectToAction("Index", "Trip");  // חזרה לגלריה
+            }
+            // =========================================== ===========================================
+
             // Check waiting list priority
             var priorityCheck = await CheckWaitingListPriority(id, userId!);
             if (!priorityCheck.CanProceed)
@@ -631,6 +699,50 @@ namespace TravelAgencyService.Controllers
         }
 
         #region Helper Methods
+
+        private async Task<(bool IsAllowed, string? ErrorMessage)> CheckAgeRestriction(Trip trip, string userId)
+        {
+            // If no age restrictions, allow
+            if (!trip.MinimumAge.HasValue && !trip.MaximumAge.HasValue)
+                return (true, null);
+
+            var user = await _context.Users.FindAsync(userId);
+
+            // If user has no date of birth but trip has age restrictions
+            if (user?.DateOfBirth == null || user.DateOfBirth.Value.Year < 1900)
+            {
+                return (false, "This trip has age restrictions. Please update your date of birth in your profile to proceed.");
+            }
+
+            // Calculate exact age
+            var today = DateTime.Today;
+            var birthDate = user.DateOfBirth.Value;
+            var age = today.Year - birthDate.Year;
+            if (birthDate.Date > today.AddYears(-age)) age--;
+
+            // Build age range string
+            string ageRange;
+            if (trip.MinimumAge.HasValue && trip.MaximumAge.HasValue)
+                ageRange = $"{trip.MinimumAge}-{trip.MaximumAge}";
+            else if (trip.MinimumAge.HasValue)
+                ageRange = $"{trip.MinimumAge}+";
+            else
+                ageRange = $"up to {trip.MaximumAge}";
+
+            // Check minimum age
+            if (trip.MinimumAge.HasValue && age < trip.MinimumAge.Value)
+            {
+                return (false, $"This trip is for ages {ageRange}. Based on your date of birth, you do not meet the age requirement and cannot book this trip.");
+            }
+
+            // Check maximum age
+            if (trip.MaximumAge.HasValue && age > trip.MaximumAge.Value)
+            {
+                return (false, $"This trip is for ages {ageRange}. Based on your date of birth, you do not meet the age requirement and cannot book this trip.");
+            }
+
+            return (true, null);
+        }
 
         private async Task<(bool CanProceed, string Message)> CheckWaitingListPriority(int tripId, string currentUserId)
         {

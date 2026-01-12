@@ -4,6 +4,21 @@
     ViewData["Title"] = "Trip Gallery";
 }
 
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
+        <i class="bi bi-exclamation-triangle me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+        <i class="bi bi-check-circle me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
 <div class="container-fluid">
     <div class="row mb-4">
         <div class="col-12">
