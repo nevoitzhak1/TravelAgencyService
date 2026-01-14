@@ -2,6 +2,7 @@
 using TravelAgencyService.Data;
 using TravelAgencyService.Models;
 using TravelAgencyService.Services.Email;
+using TravelAgencyService.Controllers; // For WaitingListController static methods
 
 namespace TravelAgencyService.Services.Background
 {
@@ -138,23 +139,48 @@ namespace TravelAgencyService.Services.Background
 
                 await db.SaveChangesAsync(ct);
 
-                await SendExpirationEmail(expiredEntry, email);
+                // Calculate what booking window was for the expiration email
+                var trip = expiredEntry.Trip;
+                int bookingWindowHours = 24; // default
+                if (trip != null)
+                {
+                    int daysUntilTrip = (trip.StartDate.Date - DateTime.Now.Date).Days;
+                    if (daysUntilTrip < 0) daysUntilTrip = 0;
 
-                var trip = await db.Trips.FindAsync(new object[] { tripId }, ct);
+                    var totalWaiting = await db.WaitingListEntries
+                        .CountAsync(w => w.TripId == tripId &&
+                                        (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified), ct);
+
+                    bookingWindowHours = WaitingListController.CalculateBookingWindowHours(daysUntilTrip, totalWaiting);
+                }
+
+                await SendExpirationEmail(expiredEntry, email, bookingWindowHours);
+
+                trip = await db.Trips.FindAsync(new object[] { tripId }, ct);
                 if (trip != null && trip.AvailableRooms > 0)
                 {
                     var nextEntry = await FindEligibleWaitingListEntry(db, tripId, trip.AvailableRooms, ct);
 
                     if (nextEntry != null)
                     {
+                        // Calculate dynamic booking window for next person
+                        int daysUntilTrip = (trip.StartDate.Date - DateTime.Now.Date).Days;
+                        if (daysUntilTrip < 0) daysUntilTrip = 0;
+
+                        var totalWaiting = await db.WaitingListEntries
+                            .CountAsync(w => w.TripId == tripId &&
+                                            (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified), ct);
+
+                        int newBookingWindowHours = WaitingListController.CalculateBookingWindowHours(daysUntilTrip, totalWaiting);
+
                         nextEntry.Status = WaitingListStatus.Notified;
                         nextEntry.IsNotified = true;
                         nextEntry.NotificationDate = DateTime.Now;
-                        nextEntry.NotificationExpiresAt = DateTime.Now.AddHours(24);
+                        nextEntry.NotificationExpiresAt = DateTime.Now.AddHours(newBookingWindowHours);
 
                         await db.SaveChangesAsync(ct);
 
-                        await SendWaitingListNotificationEmail(nextEntry, email);
+                        await SendWaitingListNotificationEmail(nextEntry, email, newBookingWindowHours);
                         await SendPositionUpdateEmails(db, tripId, nextEntry.WaitingListEntryId, email, ct);
                     }
                 }
@@ -194,7 +220,7 @@ namespace TravelAgencyService.Services.Background
             return null;
         }
 
-        private async Task SendExpirationEmail(WaitingListEntry entry, IEmailSender email)
+        private async Task SendExpirationEmail(WaitingListEntry entry, IEmailSender email, int bookingWindowHours)
         {
             try
             {
@@ -204,6 +230,8 @@ namespace TravelAgencyService.Services.Background
                 var userName = entry.User?.FirstName ?? "Traveler";
                 var tripName = entry.Trip?.PackageName ?? "Your Trip";
                 var destination = entry.Trip?.Destination ?? "";
+
+                string bookingWindowText = WaitingListController.FormatBookingWindow(bookingWindowHours);
 
                 var subject = $"Time Expired - {tripName}";
 
@@ -216,7 +244,7 @@ namespace TravelAgencyService.Services.Background
                     <div style='padding: 30px; background: #f9f9f9;'>
                         <p style='font-size: 18px;'>Hi {userName},</p>
                         
-                        <p>Unfortunately, your 24-hour booking window for the following trip has expired:</p>
+                        <p>Unfortunately, your {bookingWindowText} booking window for the following trip has expired:</p>
                         
                         <div style='background: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #eb3349;'>
                             <h2 style='color: #eb3349; margin-top: 0;'>{tripName}</h2>
@@ -246,7 +274,7 @@ namespace TravelAgencyService.Services.Background
             }
         }
 
-        private async Task SendWaitingListNotificationEmail(WaitingListEntry entry, IEmailSender email)
+        private async Task SendWaitingListNotificationEmail(WaitingListEntry entry, IEmailSender email, int bookingWindowHours)
         {
             try
             {
@@ -258,6 +286,8 @@ namespace TravelAgencyService.Services.Background
                 var destination = entry.Trip?.Destination ?? "";
                 var country = entry.Trip?.Country ?? "";
                 var tripId = entry.TripId;
+
+                string bookingWindowText = WaitingListController.FormatBookingWindow(bookingWindowHours);
 
                 var subject = $"Your Turn Has Come! - {tripName}";
 
@@ -280,7 +310,7 @@ namespace TravelAgencyService.Services.Background
                         
                         <div style='background: #fff3cd; padding: 15px; border-radius: 10px; margin: 20px 0;'>
                             <p style='margin: 0; color: #856404;'>
-                                <strong>Important:</strong> You have <strong>24 hours</strong> to complete your booking before the spot is offered to the next person in line.
+                                <strong>Important:</strong> You have <strong>{bookingWindowText}</strong> to complete your booking before the spot is offered to the next person in line.
                             </p>
                         </div>
                         
