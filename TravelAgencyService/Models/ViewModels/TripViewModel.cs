@@ -15,21 +15,44 @@ namespace TravelAgencyService.Models.ViewModels
         public DateTime EndDate { get; set; }
         public decimal Price { get; set; }
         public decimal? OriginalPrice { get; set; }
+
+        /// <summary>
+        /// Actual rooms in database
+        /// </summary>
         public int AvailableRooms { get; set; }
+
+        /// <summary>
+        /// Rooms available for public booking (0 if there are people in waiting list)
+        /// </summary>
+        public int AvailableRoomsForPublic { get; set; }
+
         public PackageType PackageType { get; set; }
         public int? MinimumAge { get; set; }
         public int? MaximumAge { get; set; }
         public string Description { get; set; } = string.Empty;
         public string? MainImageUrl { get; set; }
         public bool IsOnSale { get; set; }
+
+        /// <summary>
+        /// True if no rooms available for public (either physically full OR rooms reserved for waiting list)
+        /// </summary>
         public bool IsFullyBooked { get; set; }
+
         public int TripDurationDays { get; set; }
         public decimal? DiscountPercentage { get; set; }
         public double AverageRating { get; set; }
         public int ReviewCount { get; set; }
         public int TimesBooked { get; set; }
 
+        /// <summary>
+        /// True if there are people waiting in the waiting list
+        /// </summary>
         public bool HasPeopleInWaitingList { get; set; }
+
+        /// <summary>
+        /// Number of people in waiting list (Waiting or Notified status)
+        /// </summary>
+        public int WaitingListCount { get; set; }
     }
 
     public class TripListViewModel

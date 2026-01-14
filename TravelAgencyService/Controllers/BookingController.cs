@@ -31,6 +31,36 @@ namespace TravelAgencyService.Controllers
             _emailSender = emailSender;
         }
 
+        #region Helper: Check if rooms are available for public
+
+        /// <summary>
+        /// Returns true if there are rooms available for public booking
+        /// (no rooms available if there are people in waiting list)
+        /// </summary>
+        private async Task<bool> AreRoomsAvailableForPublic(int tripId)
+        {
+            var trip = await _context.Trips.FindAsync(tripId);
+            if (trip == null || trip.AvailableRooms <= 0) return false;
+
+            var hasWaitingList = await _context.WaitingListEntries
+                .AnyAsync(w => w.TripId == tripId &&
+                              (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified));
+
+            return !hasWaitingList;
+        }
+
+        /// <summary>
+        /// Returns the count of people in the waiting list
+        /// </summary>
+        private async Task<int> GetWaitingListCount(int tripId)
+        {
+            return await _context.WaitingListEntries
+                .CountAsync(w => w.TripId == tripId &&
+                                (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified));
+        }
+
+        #endregion
+
         // GET: /Booking/MyBookings
         public async Task<IActionResult> MyBookings(bool showPast = false, bool showCancelled = false, bool showWaitingList = false)
         {
@@ -91,8 +121,8 @@ namespace TravelAgencyService.Controllers
             var waitingListEntries = await _context.WaitingListEntries
                 .Include(w => w.Trip)
                 .Where(w => w.UserId == userId &&
-           (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified) &&
-           w.Trip != null && w.Trip.StartDate > DateTime.Now)
+                           (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified) &&
+                           w.Trip != null && w.Trip.StartDate > DateTime.Now)
                 .OrderBy(w => w.JoinedDate)
                 .Select(w => new WaitingListItemViewModel
                 {
@@ -156,13 +186,24 @@ namespace TravelAgencyService.Controllers
                 return RedirectToAction("Index", "Trip");
             }
 
-            if (trip.AvailableRooms <= 0)
+            // Check if rooms are available for PUBLIC (not just physical rooms)
+            var roomsAvailableForPublic = await AreRoomsAvailableForPublic(id);
+
+            if (!roomsAvailableForPublic)
             {
-                TempData["Error"] = "This trip is fully booked. You can join the waiting list.";
+                var waitingCount = await GetWaitingListCount(id);
+                if (waitingCount > 0)
+                {
+                    TempData["Error"] = "There are people on the waiting list. Please join the waiting list.";
+                }
+                else
+                {
+                    TempData["Error"] = "This trip is fully booked. You can join the waiting list.";
+                }
                 return RedirectToAction("JoinWaitingList", new { id });
             }
 
-            // TURN ENFORCEMENT - Check if someone has priority (24 hour window)
+            // TURN ENFORCEMENT - Check if someone has priority (booking window)
             var priorityCheckResult = await CheckWaitingListPriority(id, userId!);
             if (!priorityCheckResult.CanProceed)
             {
@@ -251,6 +292,14 @@ namespace TravelAgencyService.Controllers
             {
                 TempData["Error"] = priorityCheckResult.Message;
                 return RedirectToAction("Details", "Trip", new { id = model.TripId });
+            }
+
+            // Check rooms available for PUBLIC
+            var roomsAvailableForPublic = await AreRoomsAvailableForPublic(model.TripId);
+            if (!roomsAvailableForPublic)
+            {
+                TempData["Error"] = "Rooms are not available for booking. Please join the waiting list.";
+                return RedirectToAction("JoinWaitingList", new { id = model.TripId });
             }
 
             if (trip.AvailableRooms < model.NumberOfRooms)
@@ -465,13 +514,16 @@ namespace TravelAgencyService.Controllers
                 return NotFound();
             }
 
-            if (trip.AvailableRooms > 0)
+            // Check if rooms are available FOR PUBLIC (not just physical rooms)
+            var roomsAvailableForPublic = await AreRoomsAvailableForPublic(id);
+
+            if (roomsAvailableForPublic)
             {
+                // Rooms are available for public - redirect to booking
                 return RedirectToAction("Book", new { id });
             }
 
-            var currentWaitingCount = await _context.WaitingListEntries
-                .CountAsync(w => w.TripId == id && w.Status == WaitingListStatus.Waiting);
+            var currentWaitingCount = await GetWaitingListCount(id);
 
             var viewModel = new JoinWaitingListViewModel
             {
@@ -505,8 +557,8 @@ namespace TravelAgencyService.Controllers
             {
                 // If cancelled or expired - allow rejoining by updating the existing entry
                 if (existingEntry.Status == WaitingListStatus.Cancelled ||
-    existingEntry.Status == WaitingListStatus.Expired ||
-    existingEntry.Status == WaitingListStatus.Booked)
+                    existingEntry.Status == WaitingListStatus.Expired ||
+                    existingEntry.Status == WaitingListStatus.Booked)
                 {
                     var maxPosition = await _context.WaitingListEntries
                         .Where(w => w.TripId == model.TripId &&
@@ -635,7 +687,7 @@ namespace TravelAgencyService.Controllers
 
         #region Waiting List Helper Methods
 
-        // Check if someone has priority to book (24-hour window)
+        // Check if someone has priority to book (booking window)
         private async Task<(bool CanProceed, string Message)> CheckWaitingListPriority(int tripId, string currentUserId)
         {
             var notifiedEntry = await _context.WaitingListEntries
@@ -679,15 +731,31 @@ namespace TravelAgencyService.Controllers
 
             if (eligibleEntry != null)
             {
+                // Calculate dynamic booking window
+                var trip = await _context.Trips.FindAsync(tripId);
+                int bookingWindowHours = 24; // default
+
+                if (trip != null)
+                {
+                    int daysUntilTrip = (trip.StartDate.Date - DateTime.Now.Date).Days;
+                    if (daysUntilTrip < 0) daysUntilTrip = 0;
+
+                    var totalWaiting = await _context.WaitingListEntries
+                        .CountAsync(w => w.TripId == tripId &&
+                                        (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified));
+
+                    bookingWindowHours = WaitingListController.CalculateBookingWindowHours(daysUntilTrip, totalWaiting);
+                }
+
                 eligibleEntry.Status = WaitingListStatus.Notified;
                 eligibleEntry.IsNotified = true;
                 eligibleEntry.NotificationDate = DateTime.Now;
-                eligibleEntry.NotificationExpiresAt = DateTime.Now.AddHours(24);
+                eligibleEntry.NotificationExpiresAt = DateTime.Now.AddHours(bookingWindowHours);
 
                 await _context.SaveChangesAsync();
 
                 // Send "Room Available" email to the first person
-                await SendRoomAvailableEmail(eligibleEntry);
+                await SendRoomAvailableEmail(eligibleEntry, bookingWindowHours);
 
                 // Send position update emails to everyone else
                 await SendPositionUpdateEmails(tripId, eligibleEntry.WaitingListEntryId);
@@ -728,7 +796,7 @@ namespace TravelAgencyService.Controllers
         }
 
         // Send "Room Available" email - for the first person who can book
-        private async Task SendRoomAvailableEmail(WaitingListEntry entry)
+        private async Task SendRoomAvailableEmail(WaitingListEntry entry, int bookingWindowHours)
         {
             try
             {
@@ -740,6 +808,8 @@ namespace TravelAgencyService.Controllers
                 var destination = entry.Trip?.Destination ?? "";
                 var country = entry.Trip?.Country ?? "";
                 var tripId = entry.TripId;
+
+                var bookingWindowText = WaitingListController.FormatBookingWindow(bookingWindowHours);
 
                 var subject = $"A spot opened for {tripName} - Book Now!";
 
@@ -762,7 +832,7 @@ namespace TravelAgencyService.Controllers
                         
                         <div style='background: #fff3cd; padding: 15px; border-radius: 10px; margin: 20px 0;'>
                             <p style='margin: 0; color: #856404;'>
-                                <strong>Important:</strong> You have <strong>24 hours</strong> to complete your booking before the spot is offered to the next person in line.
+                                <strong>Important:</strong> You have <strong>{bookingWindowText}</strong> to complete your booking before the spot is offered to the next person in line.
                             </p>
                         </div>
                         

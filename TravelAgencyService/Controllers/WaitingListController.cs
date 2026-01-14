@@ -194,29 +194,66 @@ namespace TravelAgencyService.Controllers
             // Calculate booking window for display
             int bookingWindowHours = CalculateBookingWindowHours(daysUntilTrip, totalWaiting);
 
+            // Check if rooms are available FOR PUBLIC (not just physical rooms)
+            bool roomsAvailableForPublic = trip.AvailableRooms > 0 && totalWaiting == 0;
+
             string etaText;
-            if (trip.AvailableRooms > 0)
+            string message;
+            bool canJoin;
+
+            if (roomsAvailableForPublic)
             {
-                etaText = "Rooms are available now — no need for waiting list.";
+                // Rooms available AND no one waiting - user should book directly
+                etaText = "Rooms are available now — you can book directly without joining the waiting list.";
+                message = "Rooms are available — no need for waiting list.";
+                canJoin = false;
             }
-            else if (totalWaiting == 0)
+            else if (trip.AvailableRooms > 0 && totalWaiting > 0)
             {
-                etaText = $"If you join now, you'll be first in line. You'll have {FormatBookingWindow(bookingWindowHours)} to book when notified.";
-            }
-            else if (myPosition.HasValue)
-            {
-                etaText = CalculateEtaText(myPosition.Value, daysUntilTrip, totalWaiting);
-                if (myPosition.Value > 1)
+                // Rooms exist but are reserved for people in waiting list
+                if (myPosition.HasValue)
                 {
-                    etaText += $" You'll have {FormatBookingWindow(bookingWindowHours)} to book when it's your turn.";
+                    etaText = CalculateEtaText(myPosition.Value, daysUntilTrip, totalWaiting);
+                    if (myPosition.Value > 1)
+                    {
+                        etaText += $" You'll have {FormatBookingWindow(bookingWindowHours)} to book when it's your turn.";
+                    }
                 }
+                else
+                {
+                    int potentialPosition = totalWaiting + 1;
+                    etaText = CalculateEtaText(potentialPosition, daysUntilTrip, totalWaiting + 1);
+                    etaText += $" You'll have {FormatBookingWindow(CalculateBookingWindowHours(daysUntilTrip, totalWaiting + 1))} to book when it's your turn.";
+                }
+                message = $"There are {totalWaiting} people on the waiting list. Rooms are reserved for them.";
+                canJoin = myEntry == null;
+            }
+            else if (trip.AvailableRooms <= 0 && totalWaiting == 0)
+            {
+                // No rooms, no one waiting - first in line!
+                etaText = $"If you join now, you'll be first in line. You'll have {FormatBookingWindow(bookingWindowHours)} to book when notified.";
+                message = "This trip is fully booked. You can join the waiting list.";
+                canJoin = myEntry == null;
             }
             else
             {
-                // User not in queue, show what they'd get if they join
-                int potentialPosition = totalWaiting + 1;
-                etaText = CalculateEtaText(potentialPosition, daysUntilTrip, totalWaiting + 1);
-                etaText += $" You'll have {FormatBookingWindow(CalculateBookingWindowHours(daysUntilTrip, totalWaiting + 1))} to book when it's your turn.";
+                // No rooms, people waiting
+                if (myPosition.HasValue)
+                {
+                    etaText = CalculateEtaText(myPosition.Value, daysUntilTrip, totalWaiting);
+                    if (myPosition.Value > 1)
+                    {
+                        etaText += $" You'll have {FormatBookingWindow(bookingWindowHours)} to book when it's your turn.";
+                    }
+                }
+                else
+                {
+                    int potentialPosition = totalWaiting + 1;
+                    etaText = CalculateEtaText(potentialPosition, daysUntilTrip, totalWaiting + 1);
+                    etaText += $" You'll have {FormatBookingWindow(CalculateBookingWindowHours(daysUntilTrip, totalWaiting + 1))} to book when it's your turn.";
+                }
+                message = "This trip is fully booked. You can join the waiting list.";
+                canJoin = myEntry == null;
             }
 
             var vm = new WaitingListStatusViewModel
@@ -227,11 +264,9 @@ namespace TravelAgencyService.Controllers
                 TotalWaiting = totalWaiting,
                 MyPosition = myPosition,
                 EtaText = etaText,
-                CanJoin = (trip.AvailableRooms == 0) && (myEntry == null),
-                CanLeave = (myEntry != null),
-                Message = trip.AvailableRooms == 0
-                    ? "This trip is fully booked. You can join the waiting list."
-                    : "Rooms are available — no need for waiting list.",
+                CanJoin = canJoin,
+                CanLeave = myEntry != null,
+                Message = message,
                 IsNotified = isNotified,
                 NotificationExpiresAt = expiresAt
             };
@@ -250,10 +285,18 @@ namespace TravelAgencyService.Controllers
             var trip = await _context.Trips.FirstOrDefaultAsync(t => t.TripId == tripId);
             if (trip == null) return NotFound();
 
-            if (trip.AvailableRooms > 0)
+            // Check if rooms are available FOR PUBLIC (not just physical rooms)
+            // Rooms are NOT available for public if there are people in waiting list
+            var hasWaitingList = await _context.WaitingListEntries
+                .AnyAsync(w => w.TripId == tripId &&
+                              (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified));
+
+            bool roomsAvailableForPublic = trip.AvailableRooms > 0 && !hasWaitingList;
+
+            if (roomsAvailableForPublic)
             {
-                TempData["Error"] = "Cannot join waiting list when rooms are available.";
-                return RedirectToAction(nameof(Status), new { tripId });
+                TempData["Error"] = "Rooms are available for booking. No need to join waiting list.";
+                return RedirectToAction("Details", "Trip", new { id = tripId });
             }
 
             if (string.IsNullOrWhiteSpace(user.Email))

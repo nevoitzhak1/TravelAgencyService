@@ -183,7 +183,7 @@
                                             </span>
                                             <span class="position-absolute top-0 end-0 badge bg-danger m-2">
                                                 <i class="bi bi-currency-dollar"></i>
-                                                Order NOW and Save: $@(trip.OriginalPrice - trip.Price)
+                                                Save $@(trip.OriginalPrice - trip.Price)
                                             </span>
                                         }
                                         @if (trip.IsFullyBooked)
@@ -222,148 +222,103 @@
                                             <small class="text-muted">/ person</small>
                                         </div>
 
-                                        <!-- Availability -->
+                                        <!-- Availability - USE AvailableRoomsForPublic -->
                                         <p class="mb-0">
                                             @if (trip.IsFullyBooked)
                                             {
-                                                <span class="text-danger"><i class="bi bi-x-circle"></i> No rooms available</span>
+                                                @if (trip.HasPeopleInWaitingList)
+                                                {
+                                                    <span class="text-warning">
+                                                        <i class="bi bi-hourglass-split"></i> 
+                                                        @trip.WaitingListCount people waiting
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-danger">
+                                                        <i class="bi bi-x-circle"></i> No rooms available
+                                                    </span>
+                                                }
                                             }
-                                            else if (trip.AvailableRooms <= 3)
+                                            else if (trip.AvailableRoomsForPublic <= 3)
                                             {
-                                                <span class="text-warning"><i class="bi bi-exclamation-circle"></i> Only @trip.AvailableRooms rooms left!</span>
+                                                <span class="text-warning">
+                                                    <i class="bi bi-exclamation-circle"></i> 
+                                                    Only @trip.AvailableRoomsForPublic rooms left!
+                                                </span>
                                             }
                                             else
                                             {
-                                                <span class="text-success"><i class="bi bi-check-circle"></i> @trip.AvailableRooms rooms available</span>
+                                                <span class="text-success">
+                                                    <i class="bi bi-check-circle"></i> 
+                                                    @trip.AvailableRoomsForPublic rooms available
+                                                </span>
                                             }
                                         </p>
                                     </div>
 
                                     <div class="card-footer bg-white">
-
-    <div class="d-grid gap-2">
-
-        @* Logic: Show Buy Now/Add to Cart ONLY if rooms available AND no one in waiting list *@
-
-        @if (!trip.IsFullyBooked && !trip.HasPeopleInWaitingList)
-
-        {
-
-            <div class="btn-group w-100" onclick="event.stopPropagation();">
-
-                @if (User.Identity?.IsAuthenticated == true)
-
-                {
-
-                    <a asp-controller="Cart" asp-action="BuyNow" asp-route-id="@trip.TripId"
-
-                       class="btn btn-success"
-
-                       onclick="event.stopPropagation();">
-
-                        <i class="bi bi-lightning"></i> Buy Now
-
-                    </a>
-
-                    <a asp-controller="Cart" asp-action="Add" asp-route-id="@trip.TripId"
-
-                       class="btn btn-primary"
-
-                       onclick="event.stopPropagation();">
-
-                        <i class="bi bi-cart-plus"></i> Add to Cart
-
-                    </a>
-
-                }
-
-                else
-
-                {
-
-                    <a asp-controller="Account" asp-action="Login"
-
-                       asp-route-returnUrl="@Url.Action("BuyNow", "Cart", new { id = trip.TripId })"
-
-                       class="btn btn-success"
-
-                       onclick="event.stopPropagation();">
-
-                        <i class="bi bi-lightning"></i> Buy Now
-
-                    </a>
-
-                    <a asp-controller="Account" asp-action="Login"
-
-                       asp-route-returnUrl="@Url.Action("Add", "Cart", new { id = trip.TripId })"
-
-                       class="btn btn-primary"
-
-                       onclick="event.stopPropagation();">
-
-                        <i class="bi bi-cart-plus"></i> Add to Cart
-
-                    </a>
-
-                }
-
-            </div>
-
-        }
-
-        else
-
-        {
-
-            @* Show Join Waiting List if fully booked OR if there are people in waiting list *@
-
-            @if (User.Identity?.IsAuthenticated == true)
-
-            {
-
-                <form asp-controller="WaitingList" asp-action="Join" method="post"
-
-                      onclick="event.stopPropagation();">
-
-                    @Html.AntiForgeryToken()
-
-                    <input type="hidden" name="tripId" value="@trip.TripId" />
-
-                    <button type="submit" class="btn btn-warning w-100">
-
-                        <i class="bi bi-hourglass"></i> Join Waiting List
-
-                    </button>
-
-                </form>
-
-            }
-
-            else
-
-            {
-
-                <a asp-controller="Account" asp-action="Login"
-
-                   asp-route-returnUrl="@Url.Action("Details", "Trip", new { id = trip.TripId })"
-
-                   class="btn btn-warning w-100"
-
-                   onclick="event.stopPropagation();">
-
-                    <i class="bi bi-hourglass"></i> Join Waiting List
-
-                </a>
-
-            }
-
-        }
-
-    </div>
-
-</div>
-
-
+                                        <div class="d-grid gap-2">
+                                            @* Logic: Show Buy Now/Add to Cart ONLY if rooms available for public *@
+                                            @if (!trip.IsFullyBooked)
+                                            {
+                                                <div class="btn-group w-100" onclick="event.stopPropagation();">
+                                                    @if (User.Identity?.IsAuthenticated == true)
+                                                    {
+                                                        <a asp-controller="Cart" asp-action="BuyNow" asp-route-id="@trip.TripId"
+                                                           class="btn btn-success"
+                                                           onclick="event.stopPropagation();">
+                                                            <i class="bi bi-lightning"></i> Buy Now
+                                                        </a>
+                                                        <a asp-controller="Cart" asp-action="Add" asp-route-id="@trip.TripId"
+                                                           class="btn btn-primary"
+                                                           onclick="event.stopPropagation();">
+                                                            <i class="bi bi-cart-plus"></i> Add to Cart
+                                                        </a>
+                                                    }
+                                                    else
+                                                    {
+                                                        <a asp-controller="Account" asp-action="Login"
+                                                           asp-route-returnUrl="@Url.Action("BuyNow", "Cart", new { id = trip.TripId })"
+                                                           class="btn btn-success"
+                                                           onclick="event.stopPropagation();">
+                                                            <i class="bi bi-lightning"></i> Buy Now
+                                                        </a>
+                                                        <a asp-controller="Account" asp-action="Login"
+                                                           asp-route-returnUrl="@Url.Action("Add", "Cart", new { id = trip.TripId })"
+                                                           class="btn btn-primary"
+                                                           onclick="event.stopPropagation();">
+                                                            <i class="bi bi-cart-plus"></i> Add to Cart
+                                                        </a>
+                                                    }
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                @* Show Join Waiting List if fully booked for public *@
+                                                @if (User.Identity?.IsAuthenticated == true)
+                                                {
+                                                    <form asp-controller="WaitingList" asp-action="Join" method="post"
+                                                          onclick="event.stopPropagation();">
+                                                        @Html.AntiForgeryToken()
+                                                        <input type="hidden" name="tripId" value="@trip.TripId" />
+                                                        <button type="submit" class="btn btn-warning w-100">
+                                                            <i class="bi bi-hourglass"></i> Join Waiting List
+                                                        </button>
+                                                    </form>
+                                                }
+                                                else
+                                                {
+                                                    <a asp-controller="Account" asp-action="Login"
+                                                       asp-route-returnUrl="@Url.Action("Details", "Trip", new { id = trip.TripId })"
+                                                       class="btn btn-warning w-100"
+                                                       onclick="event.stopPropagation();">
+                                                        <i class="bi bi-hourglass"></i> Join Waiting List
+                                                    </a>
+                                                }
+                                            }
+                                        </div>
+                                    </div>
                                 </div>
                             </a>
                         </div>

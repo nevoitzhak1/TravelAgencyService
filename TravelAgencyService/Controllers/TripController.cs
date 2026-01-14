@@ -32,7 +32,7 @@ namespace TravelAgencyService.Controllers
         {
             var query = _context.Trips
                 .Include(t => t.Reviews)
-                .Include(t => t.WaitingList)  // Added this
+                .Include(t => t.WaitingList)
                 .Where(t => t.IsVisible && t.StartDate > DateTime.Now)
                 .AsQueryable();
 
@@ -129,7 +129,6 @@ namespace TravelAgencyService.Controllers
                     Description = t.Description,
                     MainImageUrl = t.MainImageUrl,
                     IsOnSale = t.OriginalPrice != null && t.DiscountEndDate != null && t.DiscountEndDate > DateTime.Now,
-                    IsFullyBooked = t.AvailableRooms <= 0,
                     TripDurationDays = (t.EndDate - t.StartDate).Days,
                     DiscountPercentage = t.OriginalPrice != null && t.OriginalPrice > 0
                         ? Math.Round((1 - (t.Price / t.OriginalPrice.Value)) * 100, 0)
@@ -139,9 +138,21 @@ namespace TravelAgencyService.Controllers
                         : 0,
                     ReviewCount = t.Reviews != null ? t.Reviews.Count : 0,
                     TimesBooked = t.TimesBooked,
-                    // NEW: Check if there are people in waiting list
+                    // Check if there are people in waiting list
                     HasPeopleInWaitingList = t.WaitingList != null &&
-                        t.WaitingList.Any(w => w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified)
+                        t.WaitingList.Any(w => w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified),
+                    // Count people in waiting list
+                    WaitingListCount = t.WaitingList != null
+                        ? t.WaitingList.Count(w => w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified)
+                        : 0,
+                    // NEW: Available rooms for public (0 if there are people waiting)
+                    AvailableRoomsForPublic = (t.WaitingList != null &&
+                        t.WaitingList.Any(w => w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified))
+                        ? 0
+                        : t.AvailableRooms,
+                    // NEW: Is fully booked for public
+                    IsFullyBooked = t.AvailableRooms <= 0 ||
+                        (t.WaitingList != null && t.WaitingList.Any(w => w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified))
                 })
                 .ToListAsync();
 
@@ -198,6 +209,14 @@ namespace TravelAgencyService.Controllers
                 return NotFound();
             }
 
+            // Calculate waiting list count
+            int waitingListCount = trip.WaitingList?.Count(w =>
+                w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified) ?? 0;
+
+            // Calculate available rooms for public
+            int availableRoomsForPublic = waitingListCount > 0 ? 0 : trip.AvailableRooms;
+            bool isFullyBookedForPublic = availableRoomsForPublic <= 0;
+
             var tripViewModel = new TripViewModel
             {
                 TripId = trip.TripId,
@@ -209,13 +228,16 @@ namespace TravelAgencyService.Controllers
                 Price = trip.Price,
                 OriginalPrice = trip.OriginalPrice,
                 AvailableRooms = trip.AvailableRooms,
+                AvailableRoomsForPublic = availableRoomsForPublic,
                 PackageType = trip.PackageType,
                 MinimumAge = trip.MinimumAge,
                 MaximumAge = trip.MaximumAge,
                 Description = trip.Description,
                 MainImageUrl = trip.MainImageUrl,
                 IsOnSale = trip.IsOnSale,
-                IsFullyBooked = trip.IsFullyBooked,
+                IsFullyBooked = isFullyBookedForPublic,
+                HasPeopleInWaitingList = waitingListCount > 0,
+                WaitingListCount = waitingListCount,
                 TripDurationDays = trip.TripDurationDays,
                 DiscountPercentage = trip.DiscountPercentage,
                 AverageRating = trip.Reviews != null && trip.Reviews.Any()
@@ -250,7 +272,6 @@ namespace TravelAgencyService.Controllers
             bool isInCart = false;
             bool isInWaitingList = false;
             int waitingListPosition = 0;
-            int waitingListCount = trip.WaitingList?.Count(w => w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified) ?? 0;
 
             if (User.Identity?.IsAuthenticated == true)
             {
