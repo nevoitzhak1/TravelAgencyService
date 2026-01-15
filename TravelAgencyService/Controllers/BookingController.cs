@@ -549,67 +549,83 @@ namespace TravelAgencyService.Controllers
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // Check ALL statuses - not just Waiting/Notified
-            var existingEntry = await _context.WaitingListEntries
-                .FirstOrDefaultAsync(w => w.UserId == userId && w.TripId == model.TripId);
+            // Use transaction to prevent race conditions
+            using var transaction = await _context.Database.BeginTransactionAsync();
 
-            if (existingEntry != null)
+            try
             {
-                // If cancelled or expired - allow rejoining by updating the existing entry
-                if (existingEntry.Status == WaitingListStatus.Cancelled ||
-                    existingEntry.Status == WaitingListStatus.Expired ||
-                    existingEntry.Status == WaitingListStatus.Booked)
+                // Check ALL statuses - not just Waiting/Notified
+                var existingEntry = await _context.WaitingListEntries
+                    .FirstOrDefaultAsync(w => w.UserId == userId && w.TripId == model.TripId);
+
+                if (existingEntry != null)
+                {
+                    // If cancelled or expired - allow rejoining by updating the existing entry
+                    if (existingEntry.Status == WaitingListStatus.Cancelled ||
+                        existingEntry.Status == WaitingListStatus.Expired ||
+                        existingEntry.Status == WaitingListStatus.Booked)
+                    {
+                        var maxPosition = await _context.WaitingListEntries
+                            .Where(w => w.TripId == model.TripId &&
+                                       (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified))
+                            .MaxAsync(w => (int?)w.Position) ?? 0;
+
+                        existingEntry.Position = maxPosition + 1;
+                        existingEntry.RoomsRequested = model.RoomsRequested;
+                        existingEntry.JoinedDate = DateTime.Now;
+                        existingEntry.Status = WaitingListStatus.Waiting;
+                        existingEntry.IsNotified = false;
+                        existingEntry.NotificationDate = null;
+                        existingEntry.NotificationExpiresAt = null;
+
+                        await _context.SaveChangesAsync();
+                        await transaction.CommitAsync();
+
+                        TempData["Success"] = $"You have been added to the waiting list at position #{existingEntry.Position}.";
+                        return RedirectToAction("Details", "Trip", new { id = model.TripId });
+                    }
+
+                    // Already in waiting list or booked
+                    await transaction.RollbackAsync();
+                    TempData["Info"] = "You are already on the waiting list for this trip.";
+                    return RedirectToAction("Details", "Trip", new { id = model.TripId });
+                }
+
+                if (ModelState.IsValid)
                 {
                     var maxPosition = await _context.WaitingListEntries
                         .Where(w => w.TripId == model.TripId &&
                                    (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified))
                         .MaxAsync(w => (int?)w.Position) ?? 0;
 
-                    existingEntry.Position = maxPosition + 1;
-                    existingEntry.RoomsRequested = model.RoomsRequested;
-                    existingEntry.JoinedDate = DateTime.Now;
-                    existingEntry.Status = WaitingListStatus.Waiting;
-                    existingEntry.IsNotified = false;
-                    existingEntry.NotificationDate = null;
-                    existingEntry.NotificationExpiresAt = null;
+                    var entry = new WaitingListEntry
+                    {
+                        UserId = userId!,
+                        TripId = model.TripId,
+                        Position = maxPosition + 1,
+                        RoomsRequested = model.RoomsRequested,
+                        JoinedDate = DateTime.Now,
+                        Status = WaitingListStatus.Waiting,
+                        IsNotified = false
+                    };
 
+                    _context.WaitingListEntries.Add(entry);
                     await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
 
-                    TempData["Success"] = $"You have been added to the waiting list at position #{existingEntry.Position}.";
+                    TempData["Success"] = $"You have been added to the waiting list at position #{entry.Position}. We will notify you when a room becomes available.";
                     return RedirectToAction("Details", "Trip", new { id = model.TripId });
                 }
 
-                // Already in waiting list or booked
-                TempData["Info"] = "You are already on the waiting list for this trip.";
-                return RedirectToAction("Details", "Trip", new { id = model.TripId });
+                await transaction.RollbackAsync();
+                return View(model);
             }
-
-            if (ModelState.IsValid)
+            catch
             {
-                var maxPosition = await _context.WaitingListEntries
-                    .Where(w => w.TripId == model.TripId &&
-                               (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified))
-                    .MaxAsync(w => (int?)w.Position) ?? 0;
-
-                var entry = new WaitingListEntry
-                {
-                    UserId = userId!,
-                    TripId = model.TripId,
-                    Position = maxPosition + 1,
-                    RoomsRequested = model.RoomsRequested,
-                    JoinedDate = DateTime.Now,
-                    Status = WaitingListStatus.Waiting,
-                    IsNotified = false
-                };
-
-                _context.WaitingListEntries.Add(entry);
-                await _context.SaveChangesAsync();
-
-                TempData["Success"] = $"You have been added to the waiting list at position #{entry.Position}. We will notify you when a room becomes available.";
+                await transaction.RollbackAsync();
+                TempData["Error"] = "An error occurred. Please try again.";
                 return RedirectToAction("Details", "Trip", new { id = model.TripId });
             }
-
-            return View(model);
         }
 
         // GET: /Booking/DownloadItinerary/5
