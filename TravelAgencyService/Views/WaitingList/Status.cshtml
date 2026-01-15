@@ -15,6 +15,7 @@
                 </div>
 
                 <div class="card-body p-4">
+                    <!-- Success/Error Messages -->
                     @if (TempData["Success"] != null)
                     {
                         <div class="alert alert-success alert-dismissible fade show">
@@ -31,6 +32,14 @@
                         </div>
                     }
 
+                    @if (TempData["Info"] != null)
+                    {
+                        <div class="alert alert-info alert-dismissible fade show">
+                            <i class="bi bi-info-circle"></i> @TempData["Info"]
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    }
+
                     @if (!string.IsNullOrWhiteSpace(Model.Message))
                     {
                         <div class="alert alert-info">
@@ -38,6 +47,61 @@
                         </div>
                     }
 
+                    <!-- ========== IT'S YOUR TURN SECTION ========== -->
+                    @if (Model.IsNotified && Model.NotificationExpiresAt.HasValue && Model.NotificationExpiresAt.Value > DateTime.Now)
+                    {
+                        var timeRemaining = Model.NotificationExpiresAt.Value - DateTime.Now;
+                        string timeRemainingText;
+
+                        if (timeRemaining.TotalDays >= 1)
+                        {
+                            timeRemainingText = $"{(int)timeRemaining.TotalDays}d {timeRemaining.Hours}h {timeRemaining.Minutes}m remaining";
+                        }
+                        else if (timeRemaining.TotalHours >= 1)
+                        {
+                            timeRemainingText = $"{(int)timeRemaining.TotalHours}h {timeRemaining.Minutes}m remaining";
+                        }
+                        else
+                        {
+                            timeRemainingText = $"{timeRemaining.Minutes}m remaining";
+                        }
+
+                        <div class="card border-success mb-4" style="border-width: 3px !important;">
+                            <div class="card-body text-center py-4" style="background: linear-gradient(135deg, #d4edda, #c3e6cb);">
+                                <div class="mb-3">
+                                    <i class="bi bi-bell-fill text-success" style="font-size: 4rem;"></i>
+                                </div>
+                                <h2 class="text-success mb-3">
+                                    <i class="bi bi-star-fill"></i> It's Your Turn! <i class="bi bi-star-fill"></i>
+                                </h2>
+                                <p class="lead mb-3">A room is available and you have priority to book!</p>
+
+                                <div class="alert alert-warning d-inline-block mb-4">
+                                    <i class="bi bi-clock-fill"></i>
+                                    <strong>Time Remaining: @timeRemainingText</strong>
+                                    <br>
+                                    <small class="text-muted">
+                                        Expires: @Model.NotificationExpiresAt.Value.ToString("MMM dd, yyyy HH:mm")
+                                    </small>
+                                </div>
+
+                                <div class="d-grid gap-2 col-md-6 mx-auto">
+                                    <a asp-controller="Booking" asp-action="Book" asp-route-id="@Model.TripId"
+                                       class="btn btn-success btn-lg py-3">
+                                        <i class="bi bi-calendar-plus"></i> Book Now!
+                                    </a>
+                                </div>
+
+                                <p class="text-muted mt-3 mb-0">
+                                    <small>
+                                        <i class="bi bi-exclamation-circle"></i>
+                                        After this time expires, the spot will be offered to the next person in line.
+                                    </small>
+                                </p>
+                            </div>
+                        </div>
+                    }
+                    <!-- ========== END IT'S YOUR TURN SECTION ========== -->
                     <!-- Trip Info -->
                     <div class="card mb-4 border-0" style="background: #f8f9fa;">
                         <div class="card-body">
@@ -47,48 +111,100 @@
                             <div class="row">
                                 <div class="col-md-6">
                                     <p class="mb-2">
-                                        <strong>Available Rooms:</strong>
-                                        <span class="badge @(Model.AvailableRooms > 0 ? "bg-success" : "bg-danger")">
-                                            @Model.AvailableRooms
-                                        </span>
+                                        <strong><i class="bi bi-door-open"></i> Room Availability:</strong>
+                                        <br>
+                                        @if (Model.TotalWaiting > 0 && Model.AvailableRooms > 0)
+                                        {
+                                            <span class="badge bg-warning text-dark">
+                                                <i class="bi bi-lock-fill"></i> Reserved for waiting list
+                                            </span>
+                                            <br>
+                                            <small class="text-muted">
+                                                (@Model.AvailableRooms physical room(s) - held for queue)
+                                            </small>
+                                        }
+                                        else if (Model.AvailableRooms > 0 && Model.TotalWaiting == 0)
+                                        {
+                                            <span class="badge bg-success fs-6">
+                                                <i class="bi bi-check-circle"></i> @Model.AvailableRooms available
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger">
+                                                <i class="bi bi-x-circle"></i> Sold Out
+                                            </span>
+                                        }
                                     </p>
                                 </div>
                                 <div class="col-md-6">
                                     <p class="mb-2">
-                                        <strong>People Waiting:</strong>
-                                        <span class="badge bg-warning text-dark">@Model.TotalWaiting</span>
+                                        <strong><i class="bi bi-people"></i> People Waiting:</strong>
+                                        <br>
+                                        <span class="badge bg-secondary fs-6">@Model.TotalWaiting in queue</span>
                                     </p>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Queue Status -->
-                    <div class="card mb-4 border-primary">
-                        <div class="card-header bg-primary text-white">
-                            <h5 class="mb-0"><i class="bi bi-list-ol"></i> Your Queue Status</h5>
+                    <!-- Queue Status Card -->
+                    @{
+                        bool isMyTurn = Model.IsNotified && Model.NotificationExpiresAt.HasValue && Model.NotificationExpiresAt.Value > DateTime.Now;
+                        string cardBorderClass = isMyTurn ? "border-success border-3" : "border-primary";
+                        string headerBgClass = isMyTurn ? "bg-success" : "bg-primary";
+                    }
+
+                    <div class="card mb-4 @cardBorderClass">
+                        <div class="card-header @headerBgClass text-white">
+                            <h5 class="mb-0">
+                                <i class="bi bi-list-ol"></i> Your Queue Status
+                            </h5>
                         </div>
                         <div class="card-body">
                             @if (Model.MyPosition.HasValue)
                             {
                                 <div class="text-center py-3">
-                                    <div class="display-1 fw-bold text-primary mb-2">
-                                        #@Model.MyPosition.Value
-                                    </div>
-                                    <p class="text-muted">Your position in queue</p>
+                                    @if (isMyTurn)
+                                    {
+                                        <div class="mb-2">
+                                            <span class="badge bg-success fs-4 px-4 py-2">
+                                                <i class="bi bi-check-circle-fill"></i> YOUR TURN!
+                                            </span>
+                                        </div>
+                                        <p class="text-success fw-bold fs-5 mb-0">
+                                            You can book now - don't miss it!
+                                        </p>
+                                    }
+                                    else
+                                    {
+                                        <div class="display-1 fw-bold text-primary mb-2">
+                                            #@Model.MyPosition.Value
+                                        </div>
+                                        <p class="text-muted mb-0">Your position in queue</p>
+
+                                        @if (Model.MyPosition.Value == 1)
+                                        {
+                                            <div class="alert alert-info mt-3 mb-0">
+                                                <i class="bi bi-bell"></i>
+                                                <strong>You're next!</strong> You'll be notified as soon as a room becomes available.
+                                            </div>
+                                        }
+                                    }
                                 </div>
                             }
                             else
                             {
                                 <div class="text-center py-3">
                                     <i class="bi bi-dash-circle text-muted" style="font-size: 3rem;"></i>
-                                    <p class="text-muted mt-2">You are not in the waiting list</p>
+                                    <p class="text-muted mt-2 mb-0">You are not in the waiting list</p>
                                 </div>
                             }
 
-                            <div class="alert alert-light border mt-3">
+                            <!-- ETA Section -->
+                            <div class="alert alert-light border mt-3 mb-0">
                                 <strong><i class="bi bi-clock-history"></i> Estimated Wait Time:</strong>
-                                <p class="mb-0">@Model.EtaText</p>
+                                <p class="mb-0 mt-1">@Model.EtaText</p>
                             </div>
                         </div>
                     </div>
@@ -96,27 +212,45 @@
                     <!-- How It Works -->
                     <div class="card mb-4 border-0" style="background: #fff3cd;">
                         <div class="card-body">
-                            <h6 class="fw-bold">
-                                <i class="bi bi-info-circle text-warning"></i> How the Waiting List Works:
+                            <h6 class="fw-bold mb-3">
+                                <i class="bi bi-lightbulb text-warning"></i> How the Waiting List Works:
                             </h6>
-                            <ol class="mb-0 small">
-                                <li>Join the waiting list when trip is fully booked</li>
-                                <li>First-come, first-served (FIFO) order</li>
-                                <li>When a room becomes available, we'll notify you by email</li>
-                                <li>You have <strong>24 hours</strong> to complete your booking</li>
-                                <li>If you don't book in time, the next person will be notified</li>
-                            </ol>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <ol class="mb-0 small">
+                                        <li class="mb-2">Join the waiting list when trip is fully booked</li>
+                                        <li class="mb-2">First-come, first-served (FIFO) order</li>
+                                        <li class="mb-2">When a room becomes available, we'll notify you by email</li>
+                                    </ol>
+                                </div>
+                                <div class="col-md-6">
+                                    <ol class="mb-0 small" start="4">
+                                        <li class="mb-2">You'll have a <strong>limited time window</strong> to complete your booking</li>
+                                        <li class="mb-2">If you don't book in time, the next person will be notified</li>
+                                        <li class="mb-0">You can leave the waiting list anytime</li>
+                                    </ol>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Actions -->
+                    <!-- Action Buttons -->
                     <div class="d-flex gap-2 flex-wrap">
+                        @if (isMyTurn)
+                        {
+                            <!-- Primary action when it's user's turn -->
+                            <a asp-controller="Booking" asp-action="Book" asp-route-id="@Model.TripId"
+                               class="btn btn-success btn-lg flex-fill">
+                                <i class="bi bi-calendar-plus"></i> Book Now!
+                            </a>
+                        }
+
                         @if (Model.CanJoin)
                         {
                             <form asp-action="Join" asp-controller="WaitingList" method="post" class="flex-fill">
                                 @Html.AntiForgeryToken()
                                 <input type="hidden" name="tripId" value="@Model.TripId" />
-                                <button type="submit" class="btn btn-warning w-100">
+                                <button type="submit" class="btn btn-warning btn-lg w-100">
                                     <i class="bi bi-plus-circle"></i> Join Waiting List
                                 </button>
                             </form>
@@ -127,8 +261,8 @@
                             <form asp-action="Leave" asp-controller="WaitingList" method="post" class="flex-fill">
                                 @Html.AntiForgeryToken()
                                 <input type="hidden" name="tripId" value="@Model.TripId" />
-                                <button type="submit" class="btn btn-danger w-100"
-                                        onclick="return confirm('Are you sure you want to leave the waiting list?')">
+                                <button type="submit" class="btn btn-outline-danger w-100"
+                                        onclick="return confirm('Are you sure you want to leave the waiting list? You will lose your position.')">
                                     <i class="bi bi-x-circle"></i> Leave Waiting List
                                 </button>
                             </form>
@@ -139,8 +273,49 @@
                             <i class="bi bi-arrow-left"></i> Back to Trip
                         </a>
                     </div>
+
+                    <!-- Additional Info for users in queue -->
+                    @if (Model.MyPosition.HasValue && !isMyTurn)
+                    {
+                        <div class="alert alert-secondary mt-4 mb-0">
+                            <h6 class="alert-heading">
+                                <i class="bi bi-envelope"></i> Stay Updated
+                            </h6>
+                            <p class="mb-0 small">
+                                We'll send you an email notification when it's your turn to book.
+                                Make sure to check your inbox (and spam folder) regularly!
+                            </p>
+                        </div>
+                    }
+                </div>
+
+                <!-- Card Footer with Trip Link -->
+                <div class="card-footer bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            <i class="bi bi-info-circle"></i>
+                            Questions? Contact our support team.
+                        </small>
+                        <a asp-controller="Trip" asp-action="Index" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-search"></i> Browse Other Trips
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        // Auto-refresh page every 60 seconds if user is notified (to update countdown)
+        @if (Model.IsNotified && Model.NotificationExpiresAt.HasValue && Model.NotificationExpiresAt.Value > DateTime.Now)
+        {
+                <text>
+                setTimeout(function() {
+                    location.reload();
+                }, 60000); // Refresh every 60 seconds
+                </text>
+        }
+    </script>
+}

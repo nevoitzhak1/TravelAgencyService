@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TravelAgencyService.Data;
 using TravelAgencyService.Middleware;
 using TravelAgencyService.Models;
+using TravelAgencyService.Services;
 using TravelAgencyService.Services.Background;
 using TravelAgencyService.Services.Email;
 using TravelAgencyService.Services.PayPal;
@@ -38,6 +39,8 @@ builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 builder.Services.AddHostedService<TripReminderWorker>();
 builder.Services.Configure<PayPalOptions>(builder.Configuration.GetSection("PayPal"));
 builder.Services.AddHttpClient<PayPalClient>();
+builder.Services.AddHostedService<WaitingListExpirationService>();
+
 
 var app = builder.Build();
 
