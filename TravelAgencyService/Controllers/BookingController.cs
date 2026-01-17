@@ -910,37 +910,44 @@ namespace TravelAgencyService.Controllers
                 var tripName = entry.Trip?.PackageName ?? "Your Trip";
                 var destination = entry.Trip?.Destination ?? "";
 
+                // FIX: Reload the entry from database to get the UPDATED position
+                var updatedEntry = await _context.WaitingListEntries
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(w => w.WaitingListEntryId == entry.WaitingListEntryId);
+
+                int currentPosition = updatedEntry?.Position ?? entry.Position;
+
                 var subject = $"Waiting List Update - {tripName}";
 
                 var htmlBody = $@"
-                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
-                    <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;'>
-                        <h1 style='color: white; margin: 0;'>Position Update!</h1>
-                    </div>
-                    
-                    <div style='padding: 30px; background: #f9f9f9;'>
-                        <p style='font-size: 18px;'>Hi {userName},</p>
-                        
-                        <p>Good news! You've moved up in the waiting list for:</p>
-                        
-                        <div style='background: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #667eea;'>
-                            <h2 style='color: #667eea; margin-top: 0;'>{tripName}</h2>
-                            <p><strong>Destination:</strong> {destination}</p>
-                            <p><strong>Your position in line:</strong> <span style='font-size: 24px; font-weight: bold; color: #667eea;'>#{entry.Position}</span></p>
-                        </div>
-                        
-                        <p>We'll notify you as soon as a spot becomes available!</p>
-                        
-                        <p style='color: #888; font-size: 14px;'>
-                            Best regards,<br>
-                            Travel Agency Team
-                        </p>
-                    </div>
-                    
-                    <div style='background: #333; color: white; padding: 20px; text-align: center;'>
-                        <p style='margin: 0;'>{DateTime.Now.Year} Travel Agency Service</p>
-                    </div>
-                </div>";
+        <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+            <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;'>
+                <h1 style='color: white; margin: 0;'>Position Update!</h1>
+            </div>
+            
+            <div style='padding: 30px; background: #f9f9f9;'>
+                <p style='font-size: 18px;'>Hi {userName},</p>
+                
+                <p>Good news! You've moved up in the waiting list for:</p>
+                
+                <div style='background: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #667eea;'>
+                    <h2 style='color: #667eea; margin-top: 0;'>{tripName}</h2>
+                    <p><strong>Destination:</strong> {destination}</p>
+                    <p><strong>Your new position:</strong> <span style='font-size: 24px; font-weight: bold; color: #667eea;'>#{currentPosition}</span></p>
+                </div>
+                
+                <p>We'll notify you as soon as a spot becomes available!</p>
+                
+                <p style='color: #888; font-size: 14px;'>
+                    Best regards,<br>
+                    Travel Agency Team
+                </p>
+            </div>
+            
+            <div style='background: #333; color: white; padding: 20px; text-align: center;'>
+                <p style='margin: 0;'>{DateTime.Now.Year} Travel Agency Service</p>
+            </div>
+        </div>";
 
                 await _emailSender.SendAsync(userEmail, subject, htmlBody);
             }

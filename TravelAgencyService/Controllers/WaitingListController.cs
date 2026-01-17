@@ -68,36 +68,66 @@ namespace TravelAgencyService.Controllers
                 return "You're next in line! You'll be notified immediately when a room becomes available.";
             }
 
+            // Calculate booking window per person
             int bookingWindowHours = CalculateBookingWindowHours(daysUntilTrip, peopleInQueue);
-            int maxWaitHours = (position - 1) * bookingWindowHours;
+
+            // FIX: Calculate wait time based on how many people are ahead
+            // If you're position 3, there are 2 people ahead of you
+            // Each person gets 'bookingWindowHours' to complete their booking
+            int peopleAheadOfMe = position - 1;
+            int maxWaitHours = peopleAheadOfMe * bookingWindowHours;
+
             int hoursUntilTrip = daysUntilTrip * 24;
 
-            // If there's not enough time for everyone ahead in queue
+            // If there's not enough time for everyone ahead in queue to get their turn
             if (maxWaitHours >= hoursUntilTrip)
             {
-                return $"Position #{position} in queue. Note: Limited time remaining before trip departure ({daysUntilTrip} days).";
+                return $"Position #{position} in queue. Note: Limited time remaining before trip departure ({daysUntilTrip} days). " +
+                       $"There may not be enough time for your turn if people ahead use their full booking window.";
             }
 
             // Convert to friendly format
-            if (maxWaitHours < 24)
+            if (maxWaitHours < 1)
             {
-                return $"Position #{position} in queue. Estimated wait: up to {maxWaitHours} hours.";
+                return $"Position #{position} in queue. Estimated wait: less than 1 hour.";
+            }
+            else if (maxWaitHours < 24)
+            {
+                return $"Position #{position} in queue. Estimated wait: up to {maxWaitHours} hour{(maxWaitHours > 1 ? "s" : "")}.";
             }
             else
             {
                 int days = maxWaitHours / 24;
-                if (days == 1)
+                int remainingHours = maxWaitHours % 24;
+
+                if (days == 1 && remainingHours == 0)
                 {
                     return $"Position #{position} in queue. Estimated wait: up to 1 day.";
                 }
                 else if (days < 7)
                 {
-                    return $"Position #{position} in queue. Estimated wait: up to {days} days.";
+                    if (remainingHours > 0)
+                    {
+                        return $"Position #{position} in queue. Estimated wait: up to {days} day{(days > 1 ? "s" : "")} and {remainingHours} hour{(remainingHours > 1 ? "s" : "")}.";
+                    }
+                    else
+                    {
+                        return $"Position #{position} in queue. Estimated wait: up to {days} day{(days > 1 ? "s" : "")}.";
+                    }
                 }
                 else
                 {
                     int weeks = days / 7;
-                    return $"Position #{position} in queue. Estimated wait: up to {days} days (~{weeks} week{(weeks > 1 ? "s" : "")}).";
+                    int remainingDays = days % 7;
+
+                    if (remainingDays > 0)
+                    {
+                        return $"Position #{position} in queue. Estimated wait: up to {weeks} week{(weeks > 1 ? "s" : "")} and {remainingDays} day{(remainingDays > 1 ? "s" : "")} (~{days} days total).";
+                    }
+                    else
+                    {
+                        return $"Position #{position} in queue. Estimated wait: up to {weeks} week{(weeks > 1 ? "s" : "")} (~{days} days).";
+                    }
                 }
             }
         }
@@ -586,37 +616,44 @@ namespace TravelAgencyService.Controllers
                 var tripName = entry.Trip?.PackageName ?? "Your Trip";
                 var destination = entry.Trip?.Destination ?? "";
 
+                // FIX: Reload the entry from database to get the UPDATED position
+                var updatedEntry = await _context.WaitingListEntries
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(w => w.WaitingListEntryId == entry.WaitingListEntryId);
+
+                int currentPosition = updatedEntry?.Position ?? entry.Position;
+
                 var subject = $"Waiting List Update - {tripName}";
 
                 var htmlBody = $@"
-                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
-                    <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;'>
-                        <h1 style='color: white; margin: 0;'>Position Update!</h1>
-                    </div>
-                    
-                    <div style='padding: 30px; background: #f9f9f9;'>
-                        <p style='font-size: 18px;'>Hi {userName},</p>
-                        
-                        <p>Good news! You've moved up in the waiting list for:</p>
-                        
-                        <div style='background: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #667eea;'>
-                            <h2 style='color: #667eea; margin-top: 0;'>{tripName}</h2>
-                            <p><strong>Destination:</strong> {destination}</p>
-                            <p><strong>Your position in line:</strong> <span style='font-size: 24px; font-weight: bold; color: #667eea;'>#{entry.Position}</span></p>
-                        </div>
-                        
-                        <p>We'll notify you as soon as a spot becomes available!</p>
-                        
-                        <p style='color: #888; font-size: 14px;'>
-                            Best regards,<br>
-                            Travel Agency Team
-                        </p>
-                    </div>
-                    
-                    <div style='background: #333; color: white; padding: 20px; text-align: center;'>
-                        <p style='margin: 0;'>{DateTime.Now.Year} Travel Agency Service</p>
-                    </div>
-                </div>";
+        <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+            <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;'>
+                <h1 style='color: white; margin: 0;'>Position Update!</h1>
+            </div>
+            
+            <div style='padding: 30px; background: #f9f9f9;'>
+                <p style='font-size: 18px;'>Hi {userName},</p>
+                
+                <p>Good news! You've moved up in the waiting list for:</p>
+                
+                <div style='background: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #667eea;'>
+                    <h2 style='color: #667eea; margin-top: 0;'>{tripName}</h2>
+                    <p><strong>Destination:</strong> {destination}</p>
+                    <p><strong>Your new position:</strong> <span style='font-size: 24px; font-weight: bold; color: #667eea;'>#{currentPosition}</span></p>
+                </div>
+                
+                <p>We'll notify you as soon as a spot becomes available!</p>
+                
+                <p style='color: #888; font-size: 14px;'>
+                    Best regards,<br>
+                    Travel Agency Team
+                </p>
+            </div>
+            
+            <div style='background: #333; color: white; padding: 20px; text-align: center;'>
+                <p style='margin: 0;'>{DateTime.Now.Year} Travel Agency Service</p>
+            </div>
+        </div>";
 
                 await _emailSender.SendAsync(userEmail, subject, htmlBody);
             }

@@ -96,6 +96,11 @@ namespace TravelAgencyService.Models
         [Display(Name = "Times Booked")]
         public int TimesBooked { get; set; } = 0;
 
+        // Recurring trip grouping - links trips that are the same across years
+        [StringLength(450)]
+        [Display(Name = "Recurring Group Key")]
+        public string? RecurringGroupKey { get; set; }
+
         // Timestamps
         [Display(Name = "Created At")]
         public DateTime CreatedAt { get; set; } = DateTime.Now;
@@ -109,6 +114,7 @@ namespace TravelAgencyService.Models
         public virtual ICollection<WaitingListEntry>? WaitingList { get; set; }
         public virtual ICollection<Review>? Reviews { get; set; }
         public virtual ICollection<TripReminderRule>? ReminderRules { get; set; }
+        public virtual ICollection<CartItem>? CartItems { get; set; }
 
         // Computed properties (not stored in database)
         [NotMapped]

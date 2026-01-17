@@ -29,6 +29,9 @@ namespace TravelAgencyService.Models.ViewModels
     // Trip Management ViewModels
     public class TripCreateViewModel
     {
+        // NEW: Hidden field to indicate we're cloning from an existing trip
+        public int? SourceTripId { get; set; }
+
         [Required(ErrorMessage = "Package name is required")]
         [StringLength(200)]
         [Display(Name = "Package Name")]
@@ -105,6 +108,38 @@ namespace TravelAgencyService.Models.ViewModels
         public int OffsetAmount { get; set; } = 7;
         public ReminderOffsetUnit OffsetUnit { get; set; } = ReminderOffsetUnit.Days;
         public bool IsActive { get; set; } = true;
+    }
+
+    // NEW: DTO for autocomplete results
+    public class TripAutocompleteDto
+    {
+        public int TripId { get; set; }
+        public string PackageName { get; set; } = string.Empty;
+        public string Destination { get; set; } = string.Empty;
+        public string Country { get; set; } = string.Empty;
+        public int Year { get; set; }
+        public string DisplayText { get; set; } = string.Empty;
+    }
+
+    // NEW: DTO for template loading
+    public class TripTemplateDto
+    {
+        public int TripId { get; set; }
+        public string PackageName { get; set; } = string.Empty;
+        public string Destination { get; set; } = string.Empty;
+        public string Country { get; set; } = string.Empty;
+        public decimal Price { get; set; }
+        public int TotalRooms { get; set; }
+        public PackageType PackageType { get; set; }
+        public int? MinimumAge { get; set; }
+        public int? MaximumAge { get; set; }
+        public string Description { get; set; } = string.Empty;
+        public string? MainImageUrl { get; set; }
+        public bool IsVisible { get; set; }
+        public DateTime? LastBookingDate { get; set; }
+        public int CancellationDaysLimit { get; set; }
+        public int TripDurationDays { get; set; }
+        public List<ReminderRuleInput> ReminderRules { get; set; } = new();
     }
 
 
