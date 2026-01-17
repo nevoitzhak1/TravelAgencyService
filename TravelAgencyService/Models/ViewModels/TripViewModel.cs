@@ -92,6 +92,11 @@ namespace TravelAgencyService.Models.ViewModels
         public int WaitingListCount { get; set; }
         public bool HasWaitingListPriority { get; set; }
         public bool IsMyTurnToBook { get; set; }
+
+        /// <summary>
+        /// Default number of rooms to display in the room selector
+        /// </summary>
+        public int SelectedRooms { get; set; } = 1;
     }
 
     public class TripImageViewModel

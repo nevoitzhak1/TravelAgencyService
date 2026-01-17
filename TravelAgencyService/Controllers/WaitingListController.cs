@@ -55,79 +55,202 @@ namespace TravelAgencyService.Controllers
         /// <summary>
         /// Calculates estimated time until a room becomes available for a specific position in queue.
         /// Returns a user-friendly string.
+        /// 
+        /// Logic:
+        /// - Position 1: Cannot predict when a cancellation will occur, but we show helpful info
+        ///   about the trip departure date and explain the situation clearly.
+        /// - Position 2+: Calculate based on booking windows of people ahead.
+        ///   Each person ahead gets X hours to complete their booking (calculated dynamically).
+        ///   So if you're position 3, you wait for 2 people × booking window hours.
         /// </summary>
         public static string CalculateEtaText(int position, int daysUntilTrip, int peopleInQueue)
         {
+            // Invalid position
             if (position <= 0)
             {
                 return "You're not currently in the waiting list.";
             }
 
+            // Calculate booking window (used for all positions)
+            int bookingWindowHours = CalculateBookingWindowHours(daysUntilTrip, peopleInQueue);
+            string bookingWindowText = FormatBookingWindow(bookingWindowHours);
+
+            // Position 1 - First in line
             if (position == 1)
             {
-                return "You're next in line! You'll be notified immediately when a room becomes available.";
-            }
-
-            // Calculate booking window per person
-            int bookingWindowHours = CalculateBookingWindowHours(daysUntilTrip, peopleInQueue);
-
-            // FIX: Calculate wait time based on how many people are ahead
-            // If you're position 3, there are 2 people ahead of you
-            // Each person gets 'bookingWindowHours' to complete their booking
-            int peopleAheadOfMe = position - 1;
-            int maxWaitHours = peopleAheadOfMe * bookingWindowHours;
-
-            int hoursUntilTrip = daysUntilTrip * 24;
-
-            // If there's not enough time for everyone ahead in queue to get their turn
-            if (maxWaitHours >= hoursUntilTrip)
-            {
-                return $"Position #{position} in queue. Note: Limited time remaining before trip departure ({daysUntilTrip} days). " +
-                       $"There may not be enough time for your turn if people ahead use their full booking window.";
-            }
-
-            // Convert to friendly format
-            if (maxWaitHours < 1)
-            {
-                return $"Position #{position} in queue. Estimated wait: less than 1 hour.";
-            }
-            else if (maxWaitHours < 24)
-            {
-                return $"Position #{position} in queue. Estimated wait: up to {maxWaitHours} hour{(maxWaitHours > 1 ? "s" : "")}.";
-            }
-            else
-            {
-                int days = maxWaitHours / 24;
-                int remainingHours = maxWaitHours % 24;
-
-                if (days == 1 && remainingHours == 0)
+                // Can't predict when someone will cancel, but give useful information
+                if (daysUntilTrip <= 0)
                 {
-                    return $"Position #{position} in queue. Estimated wait: up to 1 day.";
+                    return "You're first in line, but the trip is departing very soon. " +
+                           "Cancellations are unlikely at this point.";
                 }
-                else if (days < 7)
+                else if (daysUntilTrip <= 3)
                 {
-                    if (remainingHours > 0)
-                    {
-                        return $"Position #{position} in queue. Estimated wait: up to {days} day{(days > 1 ? "s" : "")} and {remainingHours} hour{(remainingHours > 1 ? "s" : "")}.";
-                    }
-                    else
-                    {
-                        return $"Position #{position} in queue. Estimated wait: up to {days} day{(days > 1 ? "s" : "")}.";
-                    }
+                    return $"You're first in line! The trip departs in {daysUntilTrip} day{(daysUntilTrip > 1 ? "s" : "")}. " +
+                           $"If a room becomes available, you'll have {bookingWindowText} to complete your booking.";
+                }
+                else if (daysUntilTrip <= 7)
+                {
+                    return $"You're first in line! The trip departs in {daysUntilTrip} days. " +
+                           "Cancellations are more likely as the departure date approaches. " +
+                           $"When notified, you'll have {bookingWindowText} to book.";
+                }
+                else if (daysUntilTrip <= 14)
+                {
+                    return $"You're first in line! The trip departs in {daysUntilTrip} days. " +
+                           $"You'll be notified immediately if a cancellation occurs. " +
+                           $"You'll then have {bookingWindowText} to complete your booking.";
+                }
+                else if (daysUntilTrip <= 30)
+                {
+                    int weeks = daysUntilTrip / 7;
+                    return $"You're first in line! The trip departs in about {weeks} week{(weeks > 1 ? "s" : "")} ({daysUntilTrip} days). " +
+                           $"Cancellations may occur closer to departure. " +
+                           $"When notified, you'll have {bookingWindowText} to book.";
                 }
                 else
                 {
-                    int weeks = days / 7;
-                    int remainingDays = days % 7;
+                    int weeks = daysUntilTrip / 7;
+                    int months = daysUntilTrip / 30;
 
-                    if (remainingDays > 0)
+                    if (months >= 2)
                     {
-                        return $"Position #{position} in queue. Estimated wait: up to {weeks} week{(weeks > 1 ? "s" : "")} and {remainingDays} day{(remainingDays > 1 ? "s" : "")} (~{days} days total).";
+                        return $"You're first in line! The trip departs in about {months} months ({daysUntilTrip} days). " +
+                               $"Cancellations typically happen 1-2 weeks before departure. " +
+                               $"When notified, you'll have {bookingWindowText} to book.";
                     }
                     else
                     {
-                        return $"Position #{position} in queue. Estimated wait: up to {weeks} week{(weeks > 1 ? "s" : "")} (~{days} days).";
+                        return $"You're first in line! The trip departs in {weeks} weeks ({daysUntilTrip} days). " +
+                               $"Cancellations typically happen closer to the departure date. " +
+                               $"When notified, you'll have {bookingWindowText} to book.";
                     }
+                }
+            }
+
+            // Position 2+ - Calculate wait time based on people ahead
+            int peopleAheadOfMe = position - 1;
+            int maxWaitHours = peopleAheadOfMe * bookingWindowHours;
+            int hoursUntilTrip = daysUntilTrip * 24;
+
+            // Check if there's enough time before the trip
+            if (daysUntilTrip <= 0)
+            {
+                return $"Position #{position} in queue. The trip is departing very soon - " +
+                       "there may not be enough time for your turn.";
+            }
+
+            if (maxWaitHours >= hoursUntilTrip)
+            {
+                // Not enough time for everyone
+                return $"Position #{position} in queue ({peopleAheadOfMe} people ahead). " +
+                       $"Note: The trip departs in {daysUntilTrip} day{(daysUntilTrip > 1 ? "s" : "")}. " +
+                       "There may not be enough time for your turn if everyone ahead uses their full booking window. " +
+                       $"When it's your turn, you'll have {bookingWindowText} to book.";
+            }
+
+            // Calculate and format the estimated wait time
+            string waitTimeText = FormatWaitTime(maxWaitHours);
+
+            // Build the response message
+            string baseMessage = $"Position #{position} in queue ({peopleAheadOfMe} " +
+                                $"person{(peopleAheadOfMe > 1 ? "s" : "")} ahead of you).";
+
+            // Add context about why this is the estimate
+            if (maxWaitHours < 24)
+            {
+                return $"{baseMessage} " +
+                       $"Estimated wait: {waitTimeText} (if all ahead complete or skip their turn). " +
+                       $"When notified, you'll have {bookingWindowText} to book.";
+            }
+            else
+            {
+                return $"{baseMessage} " +
+                       $"Estimated wait: up to {waitTimeText}. " +
+                       $"This assumes each person ahead uses their full {bookingWindowText} booking window. " +
+                       "Actual wait may be shorter if people book quickly or skip their turn.";
+            }
+        }
+
+        /// <summary>
+        /// Formats wait time hours into a user-friendly string.
+        /// Examples: "2 hours", "1 day and 5 hours", "2 weeks and 3 days"
+        /// </summary>
+        private static string FormatWaitTime(int totalHours)
+        {
+            if (totalHours < 1)
+            {
+                return "less than 1 hour";
+            }
+            else if (totalHours < 24)
+            {
+                return $"{totalHours} hour{(totalHours > 1 ? "s" : "")}";
+            }
+            else if (totalHours < 48)
+            {
+                int hours = totalHours % 24;
+                if (hours == 0)
+                {
+                    return "1 day";
+                }
+                return $"1 day and {hours} hour{(hours > 1 ? "s" : "")}";
+            }
+            else if (totalHours < 168) // Less than 1 week
+            {
+                int days = totalHours / 24;
+                int hours = totalHours % 24;
+
+                if (hours == 0)
+                {
+                    return $"{days} days";
+                }
+                else if (hours <= 6)
+                {
+                    // Round down for cleaner display
+                    return $"{days} days";
+                }
+                else if (hours >= 18)
+                {
+                    // Round up
+                    return $"{days + 1} days";
+                }
+                else
+                {
+                    return $"{days} days and {hours} hours";
+                }
+            }
+            else if (totalHours < 336) // 1-2 weeks
+            {
+                int days = totalHours / 24;
+                int weeks = days / 7;
+                int remainingDays = days % 7;
+
+                if (remainingDays == 0)
+                {
+                    return $"{weeks} week{(weeks > 1 ? "s" : "")}";
+                }
+                else
+                {
+                    return $"{weeks} week{(weeks > 1 ? "s" : "")} and {remainingDays} day{(remainingDays > 1 ? "s" : "")}";
+                }
+            }
+            else // More than 2 weeks
+            {
+                int days = totalHours / 24;
+                int weeks = days / 7;
+                int remainingDays = days % 7;
+
+                if (remainingDays == 0)
+                {
+                    return $"{weeks} weeks (~{days} days)";
+                }
+                else if (remainingDays <= 2)
+                {
+                    return $"about {weeks} weeks (~{days} days)";
+                }
+                else
+                {
+                    return $"{weeks} weeks and {remainingDays} days (~{days} days total)";
                 }
             }
         }
@@ -440,6 +563,7 @@ namespace TravelAgencyService.Controllers
                     e.Position--;
                 }
 
+                // SAVE FIRST - so positions are updated in DB before sending emails
                 await _context.SaveChangesAsync();
 
                 // If the user who left was Notified, notify the next eligible person
@@ -452,7 +576,7 @@ namespace TravelAgencyService.Controllers
                     }
                 }
 
-                // Send position update emails to remaining users
+                // FIX: Send position update emails AFTER SaveChanges so they show the correct (new) positions
                 await SendPositionUpdateEmails(tripId);
 
                 TempData["Success"] = "You've been removed from the waiting list.";
@@ -592,7 +716,9 @@ namespace TravelAgencyService.Controllers
 
         private async Task SendPositionUpdateEmails(int tripId)
         {
+            // FIX: Reload entries fresh from DB with AsNoTracking to get the UPDATED positions
             var waitingEntries = await _context.WaitingListEntries
+                .AsNoTracking()
                 .Include(w => w.User)
                 .Include(w => w.Trip)
                 .Where(w => w.TripId == tripId && w.Status == WaitingListStatus.Waiting)
@@ -616,12 +742,8 @@ namespace TravelAgencyService.Controllers
                 var tripName = entry.Trip?.PackageName ?? "Your Trip";
                 var destination = entry.Trip?.Destination ?? "";
 
-                // FIX: Reload the entry from database to get the UPDATED position
-                var updatedEntry = await _context.WaitingListEntries
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(w => w.WaitingListEntryId == entry.WaitingListEntryId);
-
-                int currentPosition = updatedEntry?.Position ?? entry.Position;
+                // FIX: The entry is already loaded fresh with AsNoTracking, so Position is correct
+                int currentPosition = entry.Position;
 
                 var subject = $"Waiting List Update - {tripName}";
 

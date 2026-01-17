@@ -37,12 +37,28 @@
                     <h5 class="mb-0"><i class="bi bi-funnel"></i> Filters</h5>
                 </div>
                 <div class="card-body">
-                    <form asp-action="Index" method="get">
-                        <!-- Search -->
-                        <div class="mb-3">
+                    <form asp-action="Index" method="get" id="filterForm">
+                        <!-- Search with Autocomplete -->
+                        <div class="mb-3 position-relative">
                             <label class="form-label">Search</label>
-                            <input type="text" name="searchQuery" class="form-control"
-                                   value="@Model.SearchQuery" placeholder="Destination, country...">
+                            <div class="input-group">
+                                <span class="input-group-text bg-white border-end-0">
+                                    <i class="bi bi-search text-muted"></i>
+                                </span>
+                                <input type="text" 
+                                       name="searchQuery" 
+                                       id="tripSearchInput"
+                                       class="form-control border-start-0 ps-0"
+                                       value="@Model.SearchQuery" 
+                                       placeholder="Destination, country..."
+                                       autocomplete="off">
+                            </div>
+                            
+                            <!-- Search Dropdown Results -->
+                            <div id="searchDropdown" 
+                                 class="position-absolute w-100 bg-white border rounded-3 shadow-lg mt-1" 
+                                 style="z-index: 1050; max-height: 400px; overflow-y: auto; display: none;">
+                            </div>
                         </div>
 
                         <!-- Country -->
@@ -257,67 +273,85 @@
                                         </p>
                                     </div>
 
-                                    <div class="card-footer bg-white">
-                                        <div class="d-grid gap-2">
-                                            @* Logic: Show Buy Now/Add to Cart ONLY if rooms available for public *@
-                                            @if (!trip.IsFullyBooked)
+                                    <div class="card-footer bg-white" onclick="event.stopPropagation();">
+                                        @* Logic: Show Buy Now/Add to Cart ONLY if rooms available for public *@
+                                        @if (!trip.IsFullyBooked)
+                                        {
+                                            @if (User.Identity?.IsAuthenticated == true)
                                             {
-                                                <div class="btn-group w-100" onclick="event.stopPropagation();">
-                                                    @if (User.Identity?.IsAuthenticated == true)
-                                                    {
-                                                        <a asp-controller="Cart" asp-action="BuyNow" asp-route-id="@trip.TripId"
-                                                           class="btn btn-success"
-                                                           onclick="event.stopPropagation();">
-                                                            <i class="bi bi-lightning"></i> Buy Now
-                                                        </a>
-                                                        <a asp-controller="Cart" asp-action="Add" asp-route-id="@trip.TripId"
-                                                           class="btn btn-primary"
-                                                           onclick="event.stopPropagation();">
-                                                            <i class="bi bi-cart-plus"></i> Add to Cart
-                                                        </a>
-                                                    }
-                                                    else
-                                                    {
-                                                        <a asp-controller="Account" asp-action="Login"
-                                                           asp-route-returnUrl="@Url.Action("BuyNow", "Cart", new { id = trip.TripId })"
-                                                           class="btn btn-success"
-                                                           onclick="event.stopPropagation();">
-                                                            <i class="bi bi-lightning"></i> Buy Now
-                                                        </a>
-                                                        <a asp-controller="Account" asp-action="Login"
-                                                           asp-route-returnUrl="@Url.Action("Add", "Cart", new { id = trip.TripId })"
-                                                           class="btn btn-primary"
-                                                           onclick="event.stopPropagation();">
-                                                            <i class="bi bi-cart-plus"></i> Add to Cart
-                                                        </a>
-                                                    }
+                                                <!-- Room Quantity Selector (Compact Version) -->
+                                                <div class="mb-2">
+                                                    <div class="input-group input-group-sm">
+                                                        <button class="btn btn-outline-secondary room-decrease" type="button" 
+                                                                data-trip-id="@trip.TripId">
+                                                            <i class="bi bi-dash"></i>
+                                                        </button>
+                                                        <input type="number" class="form-control text-center room-quantity fw-bold" 
+                                                               data-trip-id="@trip.TripId"
+                                                               value="1" min="1" max="@trip.AvailableRoomsForPublic" 
+                                                               readonly style="max-width: 60px;">
+                                                        <button class="btn btn-outline-secondary room-increase" type="button"
+                                                                data-trip-id="@trip.TripId">
+                                                            <i class="bi bi-plus"></i>
+                                                        </button>
+                                                        <span class="input-group-text bg-light">
+                                                            <small class="room-label" data-trip-id="@trip.TripId">room</small>
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Action Buttons -->
+                                                <div class="d-grid gap-2">
+                                                    <a href="#" class="btn btn-success btn-buy-now"
+                                                       data-trip-id="@trip.TripId"
+                                                       data-base-url="@Url.Action("BuyNow", "Cart")">
+                                                        <i class="bi bi-lightning"></i> Buy Now
+                                                    </a>
+                                                    <a href="#" class="btn btn-primary btn-add-cart"
+                                                       data-trip-id="@trip.TripId"
+                                                       data-base-url="@Url.Action("Add", "Cart")">
+                                                        <i class="bi bi-cart-plus"></i> Add to Cart
+                                                    </a>
                                                 </div>
                                             }
                                             else
                                             {
-                                                @* Show Join Waiting List if fully booked for public *@
-                                                @if (User.Identity?.IsAuthenticated == true)
-                                                {
-                                                    <form asp-controller="WaitingList" asp-action="Join" method="post"
-                                                          onclick="event.stopPropagation();">
-                                                        @Html.AntiForgeryToken()
-                                                        <input type="hidden" name="tripId" value="@trip.TripId" />
-                                                        <button type="submit" class="btn btn-warning w-100">
-                                                            <i class="bi bi-hourglass"></i> Join Waiting List
-                                                        </button>
-                                                    </form>
-                                                }
-                                                else
-                                                {
+                                                <div class="d-grid gap-2">
                                                     <a asp-controller="Account" asp-action="Login"
-                                                       asp-route-returnUrl="@Url.Action("Details", "Trip", new { id = trip.TripId })"
-                                                       class="btn btn-warning w-100"
-                                                       onclick="event.stopPropagation();">
-                                                        <i class="bi bi-hourglass"></i> Join Waiting List
+                                                       asp-route-returnUrl="@Url.Action("BuyNow", "Cart", new { id = trip.TripId })"
+                                                       class="btn btn-success">
+                                                        <i class="bi bi-lightning"></i> Buy Now
                                                     </a>
-                                                }
+                                                    <a asp-controller="Account" asp-action="Login"
+                                                       asp-route-returnUrl="@Url.Action("Add", "Cart", new { id = trip.TripId })"
+                                                       class="btn btn-primary">
+                                                        <i class="bi bi-cart-plus"></i> Add to Cart
+                                                    </a>
+                                                </div>
                                             }
-                                        </div>
+                                        }
+                                        else
+                                        {
+                                            @* Show Join Waiting List if fully booked for public *@
+                                            @if (User.Identity?.IsAuthenticated == true)
+                                            {
+                                                <form asp-controller="WaitingList" asp-action="Join" method="post">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="tripId" value="@trip.TripId" />
+                                                    <button type="submit" class="btn btn-warning w-100">
+                                                        <i class="bi bi-hourglass"></i> Join Waiting List
+                                                    </button>
+                                                </form>
+                                            }
+                                            else
+                                            {
+                                                <a asp-controller="Account" asp-action="Login"
+                                                   asp-route-returnUrl="@Url.Action("Details", "Trip", new { id = trip.TripId })"
+                                                   class="btn btn-warning w-100">
+                                                    <i class="bi bi-hourglass"></i> Join Waiting List
+                                                </a>
+                                            }
+                                        }
                                     </div>
                                 </div>
                             </a>
@@ -392,8 +426,241 @@
 
     /* Prevent button clicks from triggering card link */
     .trip-card .btn,
-    .trip-card form {
+    .trip-card form,
+    .trip-card .input-group,
+    .trip-card .card-footer {
         position: relative;
         z-index: 10;
     }
+    
+    .trip-card .room-quantity {
+        pointer-events: none;
+    }
+
+    /* Search dropdown styles */
+    #searchDropdown {
+        border: 1px solid #e0e0e0;
+    }
+    
+    #searchDropdown::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    #searchDropdown::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
+    
+    #searchDropdown::-webkit-scrollbar-thumb {
+        background: #ccc;
+        border-radius: 3px;
+    }
+
+    .search-result-item:hover {
+        background: #f0f7ff !important;
+    }
+
+    .form-control:focus, .form-select:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+    }
 </style>
+
+@section Scripts {
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // =============================================
+    // SEARCH AUTOCOMPLETE FUNCTIONALITY
+    // =============================================
+    const searchInput = document.getElementById('tripSearchInput');
+    const searchDropdown = document.getElementById('searchDropdown');
+    const filterForm = document.getElementById('filterForm');
+    let searchTimeout;
+
+    // Fetch search results from server
+    async function fetchSearchResults(query) {
+        try {
+            const response = await fetch(`/Trip/Search?query=${encodeURIComponent(query)}`);
+            if (response.ok) {
+                return await response.json();
+            }
+        } catch (error) {
+            console.error('Search error:', error);
+        }
+        return [];
+    }
+
+    // Show search results in dropdown
+    function showSearchResults(results, query) {
+        if (results.length === 0 && query.length > 0) {
+            searchDropdown.innerHTML = `
+                <div class="p-3 text-center">
+                    <i class="bi bi-search text-muted mb-2 d-block" style="font-size: 1.5rem;"></i>
+                    <span class="text-muted">No destinations found for "${query}"</span>
+                </div>
+            `;
+            searchDropdown.style.display = 'block';
+            return;
+        }
+
+        if (results.length === 0) {
+            searchDropdown.style.display = 'none';
+            return;
+        }
+
+        searchDropdown.innerHTML = results.map(trip => `
+            <div class="search-result-item p-2 border-bottom" 
+                 data-trip-id="${trip.tripId}" 
+                 data-destination="${trip.destination}"
+                 data-country="${trip.country}"
+                 style="cursor: pointer; transition: background 0.2s;">
+                <div class="d-flex align-items-center">
+                    <div class="me-3" style="width: 60px; height: 45px; flex-shrink: 0;">
+                        ${trip.mainImageUrl 
+                            ? `<img src="${trip.mainImageUrl}" class="rounded" style="width: 100%; height: 100%; object-fit: cover;" alt="${trip.packageName}">` 
+                            : `<div class="rounded bg-light d-flex align-items-center justify-content-center h-100"><i class="bi bi-image text-muted"></i></div>`
+                        }
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-semibold" style="font-size: 0.9rem;">${trip.destination}</div>
+                        <small class="text-muted">${trip.country}</small>
+                    </div>
+                    <div class="text-end">
+                        <span class="fw-bold text-primary">$${trip.price}</span>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        
+        searchDropdown.style.display = 'block';
+        attachSearchResultListeners();
+    }
+
+    // Attach click listeners to search results
+    function attachSearchResultListeners() {
+        document.querySelectorAll('.search-result-item').forEach(item => {
+            item.addEventListener('click', function() {
+                const tripId = this.dataset.tripId;
+                window.location.href = `/Trip/Details/${tripId}`;
+            });
+        });
+    }
+
+    // Search input events
+    searchInput.addEventListener('input', function() {
+        const query = this.value.trim();
+        
+        clearTimeout(searchTimeout);
+        
+        if (query.length < 2) {
+            searchDropdown.style.display = 'none';
+            return;
+        }
+
+        // Debounce search requests
+        searchTimeout = setTimeout(async () => {
+            const results = await fetchSearchResults(query);
+            showSearchResults(results, query);
+        }, 300);
+    });
+
+    // Show dropdown on focus if there's a query
+    searchInput.addEventListener('focus', async function() {
+        const query = this.value.trim();
+        if (query.length >= 2) {
+            const results = await fetchSearchResults(query);
+            showSearchResults(results, query);
+        }
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!searchInput.contains(e.target) && !searchDropdown.contains(e.target)) {
+            searchDropdown.style.display = 'none';
+        }
+    });
+
+    // Keyboard navigation
+    searchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            searchDropdown.style.display = 'none';
+        }
+        if (e.key === 'Enter') {
+            searchDropdown.style.display = 'none';
+        }
+    });
+
+    // =============================================
+    // ROOM QUANTITY SELECTOR FUNCTIONALITY
+    // =============================================
+    
+    // Handle decrease button
+    document.querySelectorAll('.room-decrease').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const tripId = this.dataset.tripId;
+            const input = document.querySelector(`.room-quantity[data-trip-id="${tripId}"]`);
+            let value = parseInt(input.value);
+            
+            if (value > 1) {
+                input.value = value - 1;
+                updateRoomLabel(tripId, value - 1);
+                updateButtonUrls(tripId);
+            }
+        });
+    });
+
+    // Handle increase button
+    document.querySelectorAll('.room-increase').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const tripId = this.dataset.tripId;
+            const input = document.querySelector(`.room-quantity[data-trip-id="${tripId}"]`);
+            const max = parseInt(input.max);
+            let value = parseInt(input.value);
+            
+            if (value < max) {
+                input.value = value + 1;
+                updateRoomLabel(tripId, value + 1);
+                updateButtonUrls(tripId);
+            }
+        });
+    });
+
+    // Update room label (singular/plural)
+    function updateRoomLabel(tripId, quantity) {
+        const label = document.querySelector(`.room-label[data-trip-id="${tripId}"]`);
+        if (label) {
+            label.textContent = quantity === 1 ? 'room' : 'rooms';
+        }
+    }
+
+    // Update button URLs with selected room quantity
+    function updateButtonUrls(tripId) {
+        const input = document.querySelector(`.room-quantity[data-trip-id="${tripId}"]`);
+        const rooms = input.value;
+        
+        // Update Buy Now button
+        const buyNowBtn = document.querySelector(`.btn-buy-now[data-trip-id="${tripId}"]`);
+        if (buyNowBtn) {
+            const baseUrl = buyNowBtn.dataset.baseUrl;
+            buyNowBtn.href = `${baseUrl}?id=${tripId}&rooms=${rooms}`;
+        }
+        
+        // Update Add to Cart button
+        const addCartBtn = document.querySelector(`.btn-add-cart[data-trip-id="${tripId}"]`);
+        if (addCartBtn) {
+            const baseUrl = addCartBtn.dataset.baseUrl;
+            addCartBtn.href = `${baseUrl}?id=${tripId}&rooms=${rooms}`;
+        }
+    }
+
+    // Initialize all button URLs
+    document.querySelectorAll('.room-quantity').forEach(input => {
+        const tripId = input.dataset.tripId;
+        updateButtonUrls(tripId);
+    });
+});
+</script>
+}

@@ -261,11 +261,47 @@
                                     }
                                     else
                                     {
-                                        <a asp-controller="Cart" asp-action="BuyNow" asp-route-id="@Model.Trip.TripId"
+                                        <!-- Room Quantity Selector -->
+                                        <div class="mb-3">
+                                            <label for="roomQuantity" class="form-label fw-bold">
+                                                <i class="bi bi-door-open"></i> Number of Rooms
+                                            </label>
+                                            <div class="input-group input-group-lg">
+                                                <button class="btn btn-outline-secondary" type="button" id="decreaseRooms">
+                                                    <i class="bi bi-dash"></i>
+                                                </button>
+                                                <input type="number" class="form-control text-center fw-bold" id="roomQuantity" 
+                                                       value="1" min="1" max="@Model.Trip.AvailableRoomsForPublic" readonly>
+                                                <button class="btn btn-outline-secondary" type="button" id="increaseRooms">
+                                                    <i class="bi bi-plus"></i>
+                                                </button>
+                                            </div>
+                                            <small class="text-muted">
+                                                <i class="bi bi-info-circle"></i> 
+                                                Max: @Model.Trip.AvailableRoomsForPublic rooms available
+                                            </small>
+                                        </div>
+
+                                        <!-- Total Price Display -->
+                                        <div class="alert alert-info mb-3">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span><strong>Total Price:</strong></span>
+                                                <span class="fs-4 fw-bold" id="totalPrice">$@Model.Trip.Price</span>
+                                            </div>
+                                            <small class="text-muted">
+                                                <span id="roomsText">1 room</span> × $@Model.Trip.Price per person
+                                            </small>
+                                        </div>
+
+                                        <a href="#" id="buyNowBtn" 
+                                           data-base-url="@Url.Action("BuyNow", "Cart")" 
+                                           data-trip-id="@Model.Trip.TripId"
                                            class="btn btn-success btn-lg">
                                             <i class="bi bi-lightning"></i> Buy Now
                                         </a>
-                                        <a asp-controller="Cart" asp-action="Add" asp-route-id="@Model.Trip.TripId"
+                                        <a href="#" id="addToCartBtn" 
+                                           data-base-url="@Url.Action("Add", "Cart")" 
+                                           data-trip-id="@Model.Trip.TripId"
                                            class="btn btn-outline-primary btn-lg">
                                             <i class="bi bi-cart-plus"></i> Add to Cart
                                         </a>
@@ -337,3 +373,65 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        // Room quantity management
+        const roomQuantityInput = document.getElementById('roomQuantity');
+        const decreaseBtn = document.getElementById('decreaseRooms');
+        const increaseBtn = document.getElementById('increaseRooms');
+        const buyNowBtn = document.getElementById('buyNowBtn');
+        const addToCartBtn = document.getElementById('addToCartBtn');
+        const totalPriceEl = document.getElementById('totalPrice');
+        const roomsTextEl = document.getElementById('roomsText');
+        
+        const pricePerPerson = @Model.Trip.Price;
+        const maxRooms = @Model.Trip.AvailableRoomsForPublic;
+
+        if (roomQuantityInput && decreaseBtn && increaseBtn) {
+            // Update total price display
+            function updateTotalPrice() {
+                const quantity = parseInt(roomQuantityInput.value);
+                const total = (quantity * pricePerPerson).toFixed(2);
+                totalPriceEl.textContent = '$' + total;
+                roomsTextEl.textContent = quantity + (quantity === 1 ? ' room' : ' rooms');
+            }
+
+            // Update button URLs
+            function updateButtonUrls() {
+                const quantity = roomQuantityInput.value;
+                const tripId = buyNowBtn.dataset.tripId;
+                
+                // Update Buy Now button
+                const buyNowUrl = buyNowBtn.dataset.baseUrl + '?id=' + tripId + '&rooms=' + quantity;
+                buyNowBtn.href = buyNowUrl;
+                
+                // Update Add to Cart button
+                const addToCartUrl = addToCartBtn.dataset.baseUrl + '?id=' + tripId + '&rooms=' + quantity;
+                addToCartBtn.href = addToCartUrl;
+            }
+
+            decreaseBtn.addEventListener('click', function() {
+                let currentValue = parseInt(roomQuantityInput.value);
+                if (currentValue > 1) {
+                    roomQuantityInput.value = currentValue - 1;
+                    updateTotalPrice();
+                    updateButtonUrls();
+                }
+            });
+
+            increaseBtn.addEventListener('click', function() {
+                let currentValue = parseInt(roomQuantityInput.value);
+                if (currentValue < maxRooms) {
+                    roomQuantityInput.value = currentValue + 1;
+                    updateTotalPrice();
+                    updateButtonUrls();
+                }
+            });
+
+            // Initialize
+            updateTotalPrice();
+            updateButtonUrls();
+        }
+    </script>
+}

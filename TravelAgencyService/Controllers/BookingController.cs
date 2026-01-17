@@ -467,12 +467,17 @@ namespace TravelAgencyService.Controllers
                 {
                     booking.Trip.AvailableRooms += booking.NumberOfRooms;
                     booking.Trip.UpdatedAt = DateTime.Now;
+                }
 
-                    // Handle waiting list - notify first eligible person
+                // SAVE FIRST - so positions are updated in DB before sending emails
+                await _context.SaveChangesAsync();
+
+                // NOW handle waiting list (after save, so emails show correct positions)
+                if (booking.Trip != null)
+                {
                     await ProcessWaitingListAfterCancellation(booking.TripId, booking.Trip.AvailableRooms);
                 }
 
-                await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
                 TempData["Success"] = "Your booking has been cancelled successfully.";
@@ -685,6 +690,7 @@ namespace TravelAgencyService.Controllers
             // Advance positions for everyone after this user
             await AdvanceWaitingListPositions(tripId, removedPosition);
 
+            // SAVE FIRST - so positions are updated in DB before sending emails
             await _context.SaveChangesAsync();
 
             // If the user who left was Notified, notify the next eligible person
@@ -696,6 +702,9 @@ namespace TravelAgencyService.Controllers
                     await ProcessWaitingListAfterCancellation(tripId, trip.AvailableRooms);
                 }
             }
+
+            // FIX: Send position update emails AFTER SaveChanges so they show the correct (new) positions
+            await SendPositionUpdateEmails(tripId, -1); // -1 means don't exclude anyone
 
             TempData["Success"] = "You have been removed from the waiting list.";
             return RedirectToAction("MyBookings", new { showWaitingList = true });
@@ -768,12 +777,13 @@ namespace TravelAgencyService.Controllers
                 eligibleEntry.NotificationDate = DateTime.Now;
                 eligibleEntry.NotificationExpiresAt = DateTime.Now.AddHours(bookingWindowHours);
 
+                // SAVE FIRST - so positions are updated in DB before sending emails
                 await _context.SaveChangesAsync();
 
                 // Send "Room Available" email to the first person
                 await SendRoomAvailableEmail(eligibleEntry, bookingWindowHours);
 
-                // Send position update emails to everyone else
+                // Send position update emails to everyone else (AFTER SaveChanges)
                 await SendPositionUpdateEmails(tripId, eligibleEntry.WaitingListEntryId);
             }
         }
@@ -883,7 +893,9 @@ namespace TravelAgencyService.Controllers
         // Send position update emails to everyone except the notified person
         private async Task SendPositionUpdateEmails(int tripId, int excludeEntryId)
         {
+            // FIX: Reload entries fresh from DB to get the UPDATED positions
             var waitingEntries = await _context.WaitingListEntries
+                .AsNoTracking()
                 .Include(w => w.User)
                 .Include(w => w.Trip)
                 .Where(w => w.TripId == tripId &&
@@ -910,12 +922,8 @@ namespace TravelAgencyService.Controllers
                 var tripName = entry.Trip?.PackageName ?? "Your Trip";
                 var destination = entry.Trip?.Destination ?? "";
 
-                // FIX: Reload the entry from database to get the UPDATED position
-                var updatedEntry = await _context.WaitingListEntries
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(w => w.WaitingListEntryId == entry.WaitingListEntryId);
-
-                int currentPosition = updatedEntry?.Position ?? entry.Position;
+                // FIX: The entry is already loaded fresh with AsNoTracking, so Position is correct
+                int currentPosition = entry.Position;
 
                 var subject = $"Waiting List Update - {tripName}";
 
