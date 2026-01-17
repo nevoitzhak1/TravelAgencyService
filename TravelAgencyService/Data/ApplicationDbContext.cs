@@ -33,6 +33,13 @@ namespace TravelAgencyService.Data
                 entity.HasIndex(t => t.Country);
                 entity.HasIndex(t => t.PackageType);
                 entity.HasIndex(t => t.StartDate);
+                entity.HasIndex(t => t.RecurringGroupKey);
+
+                // Unique constraint: same RecurringGroupKey cannot have same year
+                // This prevents duplicate trips in the same year for a recurring series
+                entity.HasIndex(t => new { t.RecurringGroupKey, t.StartDate })
+                      .IsUnique()
+                      .HasFilter("[RecurringGroupKey] IS NOT NULL");
 
                 // One trip has many images
                 entity.HasMany(t => t.Images)

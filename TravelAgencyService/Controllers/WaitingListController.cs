@@ -16,12 +16,147 @@ namespace TravelAgencyService.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IEmailSender _emailSender;
 
+        // Constants for booking window calculation
+        private const int MIN_BOOKING_HOURS = 2;
+        private const int MAX_BOOKING_HOURS = 48;
+
         public WaitingListController(ApplicationDbContext context, UserManager<ApplicationUser> userManager, IEmailSender emailSender)
         {
             _context = context;
             _userManager = userManager;
             _emailSender = emailSender;
         }
+
+        #region Booking Window & ETA Calculation
+
+        /// <summary>
+        /// Calculates how many hours a user has to complete their booking.
+        /// Based on days until trip and number of people in queue.
+        /// Formula: (daysUntilTrip * 24) / (peopleInQueue + 1)
+        /// Min: 2 hours, Max: 48 hours
+        /// </summary>
+        public static int CalculateBookingWindowHours(int daysUntilTrip, int peopleInQueue)
+        {
+            if (daysUntilTrip <= 0) return MIN_BOOKING_HOURS;
+            if (peopleInQueue < 0) peopleInQueue = 0;
+
+            int totalHoursAvailable = daysUntilTrip * 24;
+            int divisor = peopleInQueue + 1;
+
+            int calculatedHours = totalHoursAvailable / divisor;
+
+            // Apply min/max bounds
+            if (calculatedHours < MIN_BOOKING_HOURS) return MIN_BOOKING_HOURS;
+            if (calculatedHours > MAX_BOOKING_HOURS) return MAX_BOOKING_HOURS;
+
+            return calculatedHours;
+        }
+
+        /// <summary>
+        /// Calculates estimated time until a room becomes available for a specific position in queue.
+        /// Returns a user-friendly string.
+        /// </summary>
+        public static string CalculateEtaText(int position, int daysUntilTrip, int peopleInQueue)
+        {
+            if (position <= 0)
+            {
+                return "You're not currently in the waiting list.";
+            }
+
+            if (position == 1)
+            {
+                return "You're next in line! You'll be notified immediately when a room becomes available.";
+            }
+
+            // Calculate booking window per person
+            int bookingWindowHours = CalculateBookingWindowHours(daysUntilTrip, peopleInQueue);
+
+            // FIX: Calculate wait time based on how many people are ahead
+            // If you're position 3, there are 2 people ahead of you
+            // Each person gets 'bookingWindowHours' to complete their booking
+            int peopleAheadOfMe = position - 1;
+            int maxWaitHours = peopleAheadOfMe * bookingWindowHours;
+
+            int hoursUntilTrip = daysUntilTrip * 24;
+
+            // If there's not enough time for everyone ahead in queue to get their turn
+            if (maxWaitHours >= hoursUntilTrip)
+            {
+                return $"Position #{position} in queue. Note: Limited time remaining before trip departure ({daysUntilTrip} days). " +
+                       $"There may not be enough time for your turn if people ahead use their full booking window.";
+            }
+
+            // Convert to friendly format
+            if (maxWaitHours < 1)
+            {
+                return $"Position #{position} in queue. Estimated wait: less than 1 hour.";
+            }
+            else if (maxWaitHours < 24)
+            {
+                return $"Position #{position} in queue. Estimated wait: up to {maxWaitHours} hour{(maxWaitHours > 1 ? "s" : "")}.";
+            }
+            else
+            {
+                int days = maxWaitHours / 24;
+                int remainingHours = maxWaitHours % 24;
+
+                if (days == 1 && remainingHours == 0)
+                {
+                    return $"Position #{position} in queue. Estimated wait: up to 1 day.";
+                }
+                else if (days < 7)
+                {
+                    if (remainingHours > 0)
+                    {
+                        return $"Position #{position} in queue. Estimated wait: up to {days} day{(days > 1 ? "s" : "")} and {remainingHours} hour{(remainingHours > 1 ? "s" : "")}.";
+                    }
+                    else
+                    {
+                        return $"Position #{position} in queue. Estimated wait: up to {days} day{(days > 1 ? "s" : "")}.";
+                    }
+                }
+                else
+                {
+                    int weeks = days / 7;
+                    int remainingDays = days % 7;
+
+                    if (remainingDays > 0)
+                    {
+                        return $"Position #{position} in queue. Estimated wait: up to {weeks} week{(weeks > 1 ? "s" : "")} and {remainingDays} day{(remainingDays > 1 ? "s" : "")} (~{days} days total).";
+                    }
+                    else
+                    {
+                        return $"Position #{position} in queue. Estimated wait: up to {weeks} week{(weeks > 1 ? "s" : "")} (~{days} days).";
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Formats booking window hours into a user-friendly string.
+        /// </summary>
+        public static string FormatBookingWindow(int hours)
+        {
+            if (hours < 24)
+            {
+                return $"{hours} hours";
+            }
+            else
+            {
+                int days = hours / 24;
+                int remainingHours = hours % 24;
+                if (remainingHours == 0)
+                {
+                    return days == 1 ? "1 day" : $"{days} days";
+                }
+                else
+                {
+                    return days == 1 ? $"1 day and {remainingHours} hours" : $"{days} days and {remainingHours} hours";
+                }
+            }
+        }
+
+        #endregion
 
         // GET: /WaitingList/Index
         public async Task<IActionResult> Index()
@@ -60,7 +195,8 @@ namespace TravelAgencyService.Controllers
             if (trip == null) return NotFound();
 
             var waitingQuery = _context.WaitingListEntries
-                .Where(e => e.TripId == tripId && e.Status == WaitingListStatus.Waiting);
+                .Where(e => e.TripId == tripId &&
+                           (e.Status == WaitingListStatus.Waiting || e.Status == WaitingListStatus.Notified));
 
             var totalWaiting = await waitingQuery.CountAsync();
 
@@ -81,16 +217,73 @@ namespace TravelAgencyService.Controllers
                 expiresAt = myEntry.NotificationExpiresAt;
             }
 
-            string etaText = "";
-            if (trip.AvailableRooms > 0)
-                etaText = "Rooms are available now — no need for waiting list.";
-            else if (totalWaiting == 0)
-                etaText = "Estimated: If you join now, you'll be first in line.";
+            // Calculate days until trip
+            int daysUntilTrip = (trip.StartDate.Date - DateTime.Now.Date).Days;
+            if (daysUntilTrip < 0) daysUntilTrip = 0;
+
+            // Calculate booking window for display
+            int bookingWindowHours = CalculateBookingWindowHours(daysUntilTrip, totalWaiting);
+
+            // Check if rooms are available FOR PUBLIC (not just physical rooms)
+            bool roomsAvailableForPublic = trip.AvailableRooms > 0 && totalWaiting == 0;
+
+            string etaText;
+            string message;
+            bool canJoin;
+
+            if (roomsAvailableForPublic)
+            {
+                // Rooms available AND no one waiting - user should book directly
+                etaText = "Rooms are available now — you can book directly without joining the waiting list.";
+                message = "Rooms are available — no need for waiting list.";
+                canJoin = false;
+            }
+            else if (trip.AvailableRooms > 0 && totalWaiting > 0)
+            {
+                // Rooms exist but are reserved for people in waiting list
+                if (myPosition.HasValue)
+                {
+                    etaText = CalculateEtaText(myPosition.Value, daysUntilTrip, totalWaiting);
+                    if (myPosition.Value > 1)
+                    {
+                        etaText += $" You'll have {FormatBookingWindow(bookingWindowHours)} to book when it's your turn.";
+                    }
+                }
+                else
+                {
+                    int potentialPosition = totalWaiting + 1;
+                    etaText = CalculateEtaText(potentialPosition, daysUntilTrip, totalWaiting + 1);
+                    etaText += $" You'll have {FormatBookingWindow(CalculateBookingWindowHours(daysUntilTrip, totalWaiting + 1))} to book when it's your turn.";
+                }
+                message = $"There are {totalWaiting} people on the waiting list. Rooms are reserved for them.";
+                canJoin = myEntry == null;
+            }
+            else if (trip.AvailableRooms <= 0 && totalWaiting == 0)
+            {
+                // No rooms, no one waiting - first in line!
+                etaText = $"If you join now, you'll be first in line. You'll have {FormatBookingWindow(bookingWindowHours)} to book when notified.";
+                message = "This trip is fully booked. You can join the waiting list.";
+                canJoin = myEntry == null;
+            }
             else
             {
-                var pos = myPosition ?? (totalWaiting + 1);
-                var avgDaysPerRoom = 2;
-                etaText = $"Estimated: approximately {pos * avgDaysPerRoom} days (general estimate).";
+                // No rooms, people waiting
+                if (myPosition.HasValue)
+                {
+                    etaText = CalculateEtaText(myPosition.Value, daysUntilTrip, totalWaiting);
+                    if (myPosition.Value > 1)
+                    {
+                        etaText += $" You'll have {FormatBookingWindow(bookingWindowHours)} to book when it's your turn.";
+                    }
+                }
+                else
+                {
+                    int potentialPosition = totalWaiting + 1;
+                    etaText = CalculateEtaText(potentialPosition, daysUntilTrip, totalWaiting + 1);
+                    etaText += $" You'll have {FormatBookingWindow(CalculateBookingWindowHours(daysUntilTrip, totalWaiting + 1))} to book when it's your turn.";
+                }
+                message = "This trip is fully booked. You can join the waiting list.";
+                canJoin = myEntry == null;
             }
 
             var vm = new WaitingListStatusViewModel
@@ -101,11 +294,9 @@ namespace TravelAgencyService.Controllers
                 TotalWaiting = totalWaiting,
                 MyPosition = myPosition,
                 EtaText = etaText,
-                CanJoin = (trip.AvailableRooms == 0) && (myEntry == null),
-                CanLeave = (myEntry != null),
-                Message = trip.AvailableRooms == 0
-                    ? "This trip is fully booked. You can join the waiting list."
-                    : "Rooms are available — no need for waiting list.",
+                CanJoin = canJoin,
+                CanLeave = myEntry != null,
+                Message = message,
                 IsNotified = isNotified,
                 NotificationExpiresAt = expiresAt
             };
@@ -124,10 +315,18 @@ namespace TravelAgencyService.Controllers
             var trip = await _context.Trips.FirstOrDefaultAsync(t => t.TripId == tripId);
             if (trip == null) return NotFound();
 
-            if (trip.AvailableRooms > 0)
+            // Check if rooms are available FOR PUBLIC (not just physical rooms)
+            // Rooms are NOT available for public if there are people in waiting list
+            var hasWaitingList = await _context.WaitingListEntries
+                .AnyAsync(w => w.TripId == tripId &&
+                              (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified));
+
+            bool roomsAvailableForPublic = trip.AvailableRooms > 0 && !hasWaitingList;
+
+            if (roomsAvailableForPublic)
             {
-                TempData["Error"] = "Cannot join waiting list when rooms are available.";
-                return RedirectToAction(nameof(Status), new { tripId });
+                TempData["Error"] = "Rooms are available for booking. No need to join waiting list.";
+                return RedirectToAction("Details", "Trip", new { id = tripId });
             }
 
             if (string.IsNullOrWhiteSpace(user.Email))
@@ -136,60 +335,75 @@ namespace TravelAgencyService.Controllers
                 return RedirectToAction(nameof(Status), new { tripId });
             }
 
-            // Check if user already has an entry for this trip
-            var existingEntry = await _context.WaitingListEntries
-                .FirstOrDefaultAsync(e => e.TripId == tripId && e.UserId == user.Id);
+            // Use transaction to prevent race conditions
+            using var transaction = await _context.Database.BeginTransactionAsync();
 
-            if (existingEntry != null)
+            try
             {
-                // If already waiting or notified - can't join again
-                if (existingEntry.Status == WaitingListStatus.Waiting ||
-                    existingEntry.Status == WaitingListStatus.Notified)
+                // Check if user already has an entry for this trip
+                var existingEntry = await _context.WaitingListEntries
+                    .FirstOrDefaultAsync(e => e.TripId == tripId && e.UserId == user.Id);
+
+                if (existingEntry != null)
                 {
-                    TempData["Error"] = "You're already in the waiting list.";
+                    // If already waiting or notified - can't join again
+                    if (existingEntry.Status == WaitingListStatus.Waiting ||
+                        existingEntry.Status == WaitingListStatus.Notified)
+                    {
+                        await transaction.RollbackAsync();
+                        TempData["Error"] = "You're already in the waiting list.";
+                        return RedirectToAction(nameof(Status), new { tripId });
+                    }
+
+                    // If cancelled, expired, or booked - allow rejoining by updating existing entry
+                    var maxPosition = await _context.WaitingListEntries
+                        .Where(e => e.TripId == tripId &&
+                                   (e.Status == WaitingListStatus.Waiting || e.Status == WaitingListStatus.Notified))
+                        .MaxAsync(e => (int?)e.Position) ?? 0;
+
+                    existingEntry.Position = maxPosition + 1;
+                    existingEntry.JoinedDate = DateTime.Now;
+                    existingEntry.Status = WaitingListStatus.Waiting;
+                    existingEntry.IsNotified = false;
+                    existingEntry.NotificationDate = null;
+                    existingEntry.NotificationExpiresAt = null;
+                    existingEntry.RoomsRequested = 1;
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    TempData["Success"] = $"You've been added to the waiting list at position #{existingEntry.Position}!";
                     return RedirectToAction(nameof(Status), new { tripId });
                 }
 
-                // If cancelled, expired, or booked - allow rejoining by updating existing entry
-                var maxPosition = await _context.WaitingListEntries
+                // No existing entry - create new one
+                var newMaxPosition = await _context.WaitingListEntries
                     .Where(e => e.TripId == tripId &&
                                (e.Status == WaitingListStatus.Waiting || e.Status == WaitingListStatus.Notified))
                     .MaxAsync(e => (int?)e.Position) ?? 0;
 
-                existingEntry.Position = maxPosition + 1;
-                existingEntry.JoinedDate = DateTime.Now;
-                existingEntry.Status = WaitingListStatus.Waiting;
-                existingEntry.IsNotified = false;
-                existingEntry.NotificationDate = null;
-                existingEntry.NotificationExpiresAt = null;
-                existingEntry.RoomsRequested = 1;
+                _context.WaitingListEntries.Add(new WaitingListEntry
+                {
+                    TripId = tripId,
+                    UserId = user.Id,
+                    JoinedDate = DateTime.Now,
+                    Position = newMaxPosition + 1,
+                    Status = WaitingListStatus.Waiting,
+                    RoomsRequested = 1
+                });
 
                 await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
 
-                TempData["Success"] = $"You've been added to the waiting list at position #{existingEntry.Position}!";
+                TempData["Success"] = "You've been added to the waiting list!";
                 return RedirectToAction(nameof(Status), new { tripId });
             }
-
-            // No existing entry - create new one
-            var newMaxPosition = await _context.WaitingListEntries
-                .Where(e => e.TripId == tripId &&
-                           (e.Status == WaitingListStatus.Waiting || e.Status == WaitingListStatus.Notified))
-                .MaxAsync(e => (int?)e.Position) ?? 0;
-
-            _context.WaitingListEntries.Add(new WaitingListEntry
+            catch
             {
-                TripId = tripId,
-                UserId = user.Id,
-                JoinedDate = DateTime.Now,
-                Position = newMaxPosition + 1,
-                Status = WaitingListStatus.Waiting,
-                RoomsRequested = 1
-            });
-
-            await _context.SaveChangesAsync();
-
-            TempData["Success"] = "You've been added to the waiting list!";
-            return RedirectToAction(nameof(Status), new { tripId });
+                await transaction.RollbackAsync();
+                TempData["Error"] = "An error occurred. Please try again.";
+                return RedirectToAction(nameof(Status), new { tripId });
+            }
         }
 
         // POST: /WaitingList/Leave
@@ -234,7 +448,7 @@ namespace TravelAgencyService.Controllers
                     var trip = await _context.Trips.FindAsync(tripId);
                     if (trip != null && trip.AvailableRooms > 0)
                     {
-                        await ProcessWaitingListAfterLeave(tripId, trip.AvailableRooms);
+                        await ProcessWaitingListAfterLeave(tripId, trip);
                     }
                 }
 
@@ -249,20 +463,30 @@ namespace TravelAgencyService.Controllers
 
         #region Helper Methods
 
-        private async Task ProcessWaitingListAfterLeave(int tripId, int availableRooms)
+        private async Task ProcessWaitingListAfterLeave(int tripId, Trip trip)
         {
-            var eligibleEntry = await FindEligibleWaitingListEntry(tripId, availableRooms);
+            var eligibleEntry = await FindEligibleWaitingListEntry(tripId, trip.AvailableRooms);
 
             if (eligibleEntry != null)
             {
+                // Calculate dynamic booking window
+                int daysUntilTrip = (trip.StartDate.Date - DateTime.Now.Date).Days;
+                if (daysUntilTrip < 0) daysUntilTrip = 0;
+
+                var totalWaiting = await _context.WaitingListEntries
+                    .CountAsync(w => w.TripId == tripId &&
+                                    (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified));
+
+                int bookingWindowHours = CalculateBookingWindowHours(daysUntilTrip, totalWaiting);
+
                 eligibleEntry.Status = WaitingListStatus.Notified;
                 eligibleEntry.IsNotified = true;
                 eligibleEntry.NotificationDate = DateTime.Now;
-                eligibleEntry.NotificationExpiresAt = DateTime.Now.AddHours(24);
+                eligibleEntry.NotificationExpiresAt = DateTime.Now.AddHours(bookingWindowHours);
 
                 await _context.SaveChangesAsync();
 
-                await SendWaitingListNotificationEmail(eligibleEntry);
+                await SendWaitingListNotificationEmail(eligibleEntry, bookingWindowHours);
             }
         }
 
@@ -298,7 +522,7 @@ namespace TravelAgencyService.Controllers
             return null;
         }
 
-        private async Task SendWaitingListNotificationEmail(WaitingListEntry entry)
+        private async Task SendWaitingListNotificationEmail(WaitingListEntry entry, int bookingWindowHours)
         {
             try
             {
@@ -310,6 +534,8 @@ namespace TravelAgencyService.Controllers
                 var destination = entry.Trip?.Destination ?? "";
                 var country = entry.Trip?.Country ?? "";
                 var tripId = entry.TripId;
+
+                string bookingWindowText = FormatBookingWindow(bookingWindowHours);
 
                 var subject = $"Good News! A spot opened for {tripName}";
 
@@ -332,7 +558,7 @@ namespace TravelAgencyService.Controllers
                         
                         <div style='background: #fff3cd; padding: 15px; border-radius: 10px; margin: 20px 0;'>
                             <p style='margin: 0; color: #856404;'>
-                                <strong>Important:</strong> You have <strong>24 hours</strong> to complete your booking before the spot is offered to the next person in line.
+                                <strong>Important:</strong> You have <strong>{bookingWindowText}</strong> to complete your booking before the spot is offered to the next person in line.
                             </p>
                         </div>
                         
@@ -390,37 +616,44 @@ namespace TravelAgencyService.Controllers
                 var tripName = entry.Trip?.PackageName ?? "Your Trip";
                 var destination = entry.Trip?.Destination ?? "";
 
+                // FIX: Reload the entry from database to get the UPDATED position
+                var updatedEntry = await _context.WaitingListEntries
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(w => w.WaitingListEntryId == entry.WaitingListEntryId);
+
+                int currentPosition = updatedEntry?.Position ?? entry.Position;
+
                 var subject = $"Waiting List Update - {tripName}";
 
                 var htmlBody = $@"
-                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
-                    <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;'>
-                        <h1 style='color: white; margin: 0;'>Position Update!</h1>
-                    </div>
-                    
-                    <div style='padding: 30px; background: #f9f9f9;'>
-                        <p style='font-size: 18px;'>Hi {userName},</p>
-                        
-                        <p>Good news! You've moved up in the waiting list for:</p>
-                        
-                        <div style='background: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #667eea;'>
-                            <h2 style='color: #667eea; margin-top: 0;'>{tripName}</h2>
-                            <p><strong>Destination:</strong> {destination}</p>
-                            <p><strong>Your position in line:</strong> <span style='font-size: 24px; font-weight: bold; color: #667eea;'>#{entry.Position}</span></p>
-                        </div>
-                        
-                        <p>We'll notify you as soon as a spot becomes available!</p>
-                        
-                        <p style='color: #888; font-size: 14px;'>
-                            Best regards,<br>
-                            Travel Agency Team
-                        </p>
-                    </div>
-                    
-                    <div style='background: #333; color: white; padding: 20px; text-align: center;'>
-                        <p style='margin: 0;'>{DateTime.Now.Year} Travel Agency Service</p>
-                    </div>
-                </div>";
+        <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+            <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;'>
+                <h1 style='color: white; margin: 0;'>Position Update!</h1>
+            </div>
+            
+            <div style='padding: 30px; background: #f9f9f9;'>
+                <p style='font-size: 18px;'>Hi {userName},</p>
+                
+                <p>Good news! You've moved up in the waiting list for:</p>
+                
+                <div style='background: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #667eea;'>
+                    <h2 style='color: #667eea; margin-top: 0;'>{tripName}</h2>
+                    <p><strong>Destination:</strong> {destination}</p>
+                    <p><strong>Your new position:</strong> <span style='font-size: 24px; font-weight: bold; color: #667eea;'>#{currentPosition}</span></p>
+                </div>
+                
+                <p>We'll notify you as soon as a spot becomes available!</p>
+                
+                <p style='color: #888; font-size: 14px;'>
+                    Best regards,<br>
+                    Travel Agency Team
+                </p>
+            </div>
+            
+            <div style='background: #333; color: white; padding: 20px; text-align: center;'>
+                <p style='margin: 0;'>{DateTime.Now.Year} Travel Agency Service</p>
+            </div>
+        </div>";
 
                 await _emailSender.SendAsync(userEmail, subject, htmlBody);
             }

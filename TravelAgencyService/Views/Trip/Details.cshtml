@@ -177,17 +177,25 @@
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <span><i class="bi bi-door-open"></i> Available Rooms</span>
+                            @* USE AvailableRoomsForPublic for display *@
                             @if (Model.Trip.IsFullyBooked)
                             {
-                                <span class="text-danger">Sold Out</span>
+                                @if (Model.Trip.HasPeopleInWaitingList)
+                                {
+                                    <span class="text-warning">Waiting List Active</span>
+                                }
+                                else
+                                {
+                                    <span class="text-danger">Sold Out</span>
+                                }
                             }
-                            else if (Model.Trip.AvailableRooms <= 3)
+                            else if (Model.Trip.AvailableRoomsForPublic <= 3)
                             {
-                                <span class="text-warning fw-bold">Only @Model.Trip.AvailableRooms left!</span>
+                                <span class="text-warning fw-bold">Only @Model.Trip.AvailableRoomsForPublic left!</span>
                             }
                             else
                             {
-                                <span class="text-success">@Model.Trip.AvailableRooms</span>
+                                <span class="text-success">@Model.Trip.AvailableRoomsForPublic</span>
                             }
                         </li>
                         @if (Model.Trip.MinimumAge.HasValue || Model.Trip.MaximumAge.HasValue)
@@ -232,7 +240,7 @@
                                 <!-- User's turn from waiting list - go directly to Cart/Checkout -->
                                 <div class="alert alert-success">
                                     <i class="bi bi-check-circle"></i>
-                                    <strong>It's your turn!</strong> You have 24 hours to complete your booking.
+                                    <strong>It's your turn!</strong> You have limited time to complete your booking.
                                 </div>
                                 <a asp-controller="Cart" asp-action="Checkout"
                                    asp-route-tripId="@Model.Trip.TripId" asp-route-rooms="1"
@@ -240,9 +248,9 @@
                                     <i class="bi bi-calendar-plus"></i> Book Now - Your Turn!
                                 </a>
                             }
-                            else if (!Model.Trip.IsFullyBooked && !Model.HasWaitingListPriority && Model.WaitingListCount == 0)
+                            else if (!Model.Trip.IsFullyBooked && !Model.HasWaitingListPriority)
                             {
-                                @* Show booking buttons ONLY if rooms available AND no one in waiting list *@
+                                @* Show booking buttons ONLY if rooms available for public AND no priority holder *@
                                 @if (Model.CanBook)
                                 {
                                     @if (Model.IsInCart)
@@ -273,7 +281,7 @@
                             }
                             else if (Model.HasWaitingListPriority)
                             {
-                                <!-- Someone from waiting list has priority (24h window) -->
+                                <!-- Someone from waiting list has priority -->
                                 <div class="alert alert-info">
                                     <i class="bi bi-hourglass-split"></i>
                                     Someone from the waiting list has priority to book. Please check back later.
@@ -295,7 +303,7 @@
                             }
                             else
                             {
-                                <!-- Fully booked OR there are people in waiting list - show Join Waiting List -->
+                                <!-- Fully booked for public - show Join Waiting List -->
                                 @if (!Model.IsInWaitingList)
                                 {
                                     <a asp-controller="Booking" asp-action="JoinWaitingList" asp-route-id="@Model.Trip.TripId"

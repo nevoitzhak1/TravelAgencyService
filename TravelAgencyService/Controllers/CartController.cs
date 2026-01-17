@@ -93,9 +93,8 @@ namespace TravelAgencyService.Controllers
             if (!ageCheck.IsAllowed)
             {
                 TempData["Error"] = ageCheck.ErrorMessage;
-                return RedirectToAction("Index", "Trip");  // חזרה לגלריה
+                return RedirectToAction("Index", "Trip");
             }
-            // ===========================================
             // ===========================================
 
             // Check waiting list priority
@@ -387,9 +386,8 @@ namespace TravelAgencyService.Controllers
                 if (!ageCheck.IsAllowed)
                 {
                     TempData["Error"] = ageCheck.ErrorMessage;
-                    return RedirectToAction("Index", "Trip");  // חזרה לגלריה
+                    return RedirectToAction("Index", "Trip");
                 }
-                // ===========================================
                 // ===========================================
 
                 // Validate expiry date
@@ -467,6 +465,10 @@ namespace TravelAgencyService.Controllers
 
                     _context.Bookings.Add(booking);
                     await _context.SaveChangesAsync();
+
+                    // ✅ NEW: Notify next person in waiting list if rooms still available
+                    await NotifyNextInWaitingList(trip.TripId);
+
                     await transaction.CommitAsync();
 
                     // Send confirmation email
@@ -541,6 +543,7 @@ namespace TravelAgencyService.Controllers
                 try
                 {
                     var bookingIds = new List<int>();
+                    var tripsToNotify = new List<int>(); // ✅ NEW: Track trips that need waiting list notification
                     var cardLastFour = model.CardNumber.Length >= 4
                         ? model.CardNumber.Substring(model.CardNumber.Length - 4)
                         : model.CardNumber;
@@ -587,6 +590,7 @@ namespace TravelAgencyService.Controllers
                             var removedPosition = userWaitingEntry.Position;
                             userWaitingEntry.Status = WaitingListStatus.Booked;
                             await AdvanceWaitingListPositions(item.TripId, removedPosition);
+                            tripsToNotify.Add(item.TripId); // ✅ NEW: Mark for notification
                         }
 
                         _context.Bookings.Add(booking);
@@ -596,6 +600,13 @@ namespace TravelAgencyService.Controllers
 
                     _context.CartItems.RemoveRange(cartItems);
                     await _context.SaveChangesAsync();
+
+                    // ✅ NEW: Notify next person in waiting list for each trip
+                    foreach (var tripId in tripsToNotify.Distinct())
+                    {
+                        await NotifyNextInWaitingList(tripId);
+                    }
+
                     await transaction.CommitAsync();
 
                     // Send confirmation emails
@@ -672,9 +683,9 @@ namespace TravelAgencyService.Controllers
             if (!ageCheck.IsAllowed)
             {
                 TempData["Error"] = ageCheck.ErrorMessage;
-                return RedirectToAction("Index", "Trip");  // חזרה לגלריה
+                return RedirectToAction("Index", "Trip");
             }
-            // =========================================== ===========================================
+            // ===========================================
 
             // Check waiting list priority
             var priorityCheck = await CheckWaitingListPriority(id, userId!);
@@ -779,6 +790,207 @@ namespace TravelAgencyService.Controllers
             }
         }
 
+        /// <summary>
+        /// ✅ NEW: Notify the next eligible person in the waiting list after a booking is completed
+        /// </summary>
+        private async Task NotifyNextInWaitingList(int tripId)
+        {
+            var trip = await _context.Trips.FindAsync(tripId);
+            if (trip == null || trip.AvailableRooms <= 0) return;
+
+            // Check if someone is already notified and their window hasn't expired
+            var alreadyNotified = await _context.WaitingListEntries
+                .AnyAsync(w => w.TripId == tripId &&
+                              w.Status == WaitingListStatus.Notified &&
+                              w.NotificationExpiresAt > DateTime.Now);
+
+            if (alreadyNotified) return; // Someone already has priority
+
+            // Find next eligible person (FIFO order)
+            var waitingEntries = await _context.WaitingListEntries
+                .Include(w => w.User)
+                .Where(w => w.TripId == tripId && w.Status == WaitingListStatus.Waiting)
+                .OrderBy(w => w.Position)
+                .ToListAsync();
+
+            foreach (var entry in waitingEntries)
+            {
+                // Check if user requested more rooms than available
+                if (entry.RoomsRequested > trip.AvailableRooms)
+                {
+                    continue;
+                }
+
+                // Check if user already has 3 active bookings
+                var activeBookingsCount = await _context.Bookings
+                    .CountAsync(b => b.UserId == entry.UserId &&
+                                     b.Status == BookingStatus.Confirmed &&
+                                     b.Trip!.StartDate > DateTime.Now);
+
+                if (activeBookingsCount >= 3)
+                {
+                    continue;
+                }
+
+                // Found eligible person - calculate booking window
+                int daysUntilTrip = (trip.StartDate.Date - DateTime.Now.Date).Days;
+                if (daysUntilTrip < 0) daysUntilTrip = 0;
+
+                var totalWaiting = await _context.WaitingListEntries
+                    .CountAsync(w => w.TripId == tripId &&
+                                    (w.Status == WaitingListStatus.Waiting || w.Status == WaitingListStatus.Notified));
+
+                int bookingWindowHours = WaitingListController.CalculateBookingWindowHours(daysUntilTrip, totalWaiting);
+
+                // Notify the user
+                entry.Status = WaitingListStatus.Notified;
+                entry.IsNotified = true;
+                entry.NotificationDate = DateTime.Now;
+                entry.NotificationExpiresAt = DateTime.Now.AddHours(bookingWindowHours);
+
+                await _context.SaveChangesAsync();
+
+                // Send notification email
+                await SendWaitingListNotificationEmail(entry, trip, bookingWindowHours);
+
+                // Send position update emails to others
+                await SendWaitingListPositionUpdateEmails(tripId, entry.WaitingListEntryId);
+
+                break; // Only notify one person at a time
+            }
+        }
+
+        /// <summary>
+        /// ✅ NEW: Send email to user who got their turn from waiting list
+        /// </summary>
+        private async Task SendWaitingListNotificationEmail(WaitingListEntry entry, Trip trip, int bookingWindowHours)
+        {
+            try
+            {
+                var userEmail = entry.User?.Email;
+                if (string.IsNullOrEmpty(userEmail)) return;
+
+                var userName = entry.User?.FirstName ?? "Traveler";
+                var bookingWindowText = WaitingListController.FormatBookingWindow(bookingWindowHours);
+
+                var subject = $"A spot opened for {trip.PackageName} - Book Now!";
+
+                var htmlBody = $@"
+                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+                    <div style='background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); padding: 30px; text-align: center;'>
+                        <h1 style='color: white; margin: 0;'>Your Turn Has Come!</h1>
+                    </div>
+                    
+                    <div style='padding: 30px; background: #f9f9f9;'>
+                        <p style='font-size: 18px;'>Hi {userName},</p>
+                        
+                        <p>Great news! A spot has opened up for the trip you were waiting for:</p>
+                        
+                        <div style='background: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #11998e;'>
+                            <h2 style='color: #11998e; margin-top: 0;'>{trip.PackageName}</h2>
+                            <p><strong>Destination:</strong> {trip.Destination}, {trip.Country}</p>
+                            <p><strong>Dates:</strong> {trip.StartDate:MMM dd} - {trip.EndDate:MMM dd, yyyy}</p>
+                            <p><strong>Rooms Requested:</strong> {entry.RoomsRequested}</p>
+                        </div>
+                        
+                        <div style='background: #fff3cd; padding: 15px; border-radius: 10px; margin: 20px 0;'>
+                            <p style='margin: 0; color: #856404;'>
+                                <strong>⏰ Important:</strong> You have <strong>{bookingWindowText}</strong> to complete your booking before the spot is offered to the next person in line.
+                            </p>
+                        </div>
+                        
+                        <div style='text-align: center; margin: 30px 0;'>
+                            <a href='https://localhost:7232/Booking/Book/{trip.TripId}' 
+                               style='background: #11998e; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-size: 18px; display: inline-block;'>
+                                🎉 Book Now
+                            </a>
+                        </div>
+                        
+                        <p>Don't miss this opportunity!</p>
+                        
+                        <p style='color: #888; font-size: 14px;'>
+                            Best regards,<br>
+                            Travel Agency Team
+                        </p>
+                    </div>
+                    
+                    <div style='background: #333; color: white; padding: 20px; text-align: center;'>
+                        <p style='margin: 0;'>© {DateTime.Now.Year} Travel Agency Service</p>
+                    </div>
+                </div>";
+
+                await _emailSender.SendAsync(userEmail, subject, htmlBody);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to send waiting list notification email: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// ✅ NEW: Send position update emails to remaining waiting list users
+        /// </summary>
+        private async Task SendWaitingListPositionUpdateEmails(int tripId, int excludeEntryId)
+        {
+            var entries = await _context.WaitingListEntries
+                .Include(w => w.User)
+                .Include(w => w.Trip)
+                .Where(w => w.TripId == tripId &&
+                            w.Status == WaitingListStatus.Waiting &&
+                            w.WaitingListEntryId != excludeEntryId)
+                .OrderBy(w => w.Position)
+                .ToListAsync();
+
+            foreach (var entry in entries)
+            {
+                try
+                {
+                    var userEmail = entry.User?.Email;
+                    if (string.IsNullOrEmpty(userEmail)) continue;
+
+                    var userName = entry.User?.FirstName ?? "Traveler";
+                    var tripName = entry.Trip?.PackageName ?? "Your Trip";
+
+                    var subject = $"Waiting List Update - {tripName}";
+
+                    var htmlBody = $@"
+                    <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+                        <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;'>
+                            <h1 style='color: white; margin: 0;'>Position Update!</h1>
+                        </div>
+                        
+                        <div style='padding: 30px; background: #f9f9f9;'>
+                            <p style='font-size: 18px;'>Hi {userName},</p>
+                            
+                            <p>Good news! You've moved up in the waiting list for:</p>
+                            
+                            <div style='background: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #667eea;'>
+                                <h2 style='color: #667eea; margin-top: 0;'>{tripName}</h2>
+                                <p><strong>Your new position:</strong> <span style='font-size: 28px; font-weight: bold; color: #667eea;'>#{entry.Position}</span></p>
+                            </div>
+                            
+                            <p>We'll notify you as soon as a spot becomes available!</p>
+                            
+                            <p style='color: #888; font-size: 14px;'>
+                                Best regards,<br>
+                                Travel Agency Team
+                            </p>
+                        </div>
+                        
+                        <div style='background: #333; color: white; padding: 20px; text-align: center;'>
+                            <p style='margin: 0;'>© {DateTime.Now.Year} Travel Agency Service</p>
+                        </div>
+                    </div>";
+
+                    await _emailSender.SendAsync(userEmail, subject, htmlBody);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to send position update email: {ex.Message}");
+                }
+            }
+        }
+
         private async Task SendBookingConfirmationEmail(int bookingId)
         {
             try
@@ -829,7 +1041,7 @@ namespace TravelAgencyService.Controllers
                     </div>
                     
                     <div style='background: #333; color: white; padding: 20px; text-align: center;'>
-                        <p style='margin: 0;'>{DateTime.Now.Year} Travel Agency Service</p>
+                        <p style='margin: 0;'>© {DateTime.Now.Year} Travel Agency Service</p>
                     </div>
                 </div>";
 

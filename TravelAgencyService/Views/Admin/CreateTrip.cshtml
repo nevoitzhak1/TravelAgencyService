@@ -12,7 +12,25 @@
             <li class="breadcrumb-item active">Create Trip</li>
         </ol>
     </nav>
+    @* Display Warning Messages (for duplicate year suggestions) *@
+    @if (TempData["Warning"] != null)
+    {
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <strong>Note:</strong> @TempData["Warning"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
 
+    @* Display Error Messages *@
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-x-circle-fill"></i>
+            <strong>Error:</strong> @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
     <div class="row">
         <div class="col-md-8">
             <div class="card shadow">
@@ -20,8 +38,74 @@
                     <h4 class="mb-0"><i class="bi bi-plus-circle"></i> Create New Trip</h4>
                 </div>
                 <div class="card-body">
-                    <form asp-action="CreateTrip" method="post">
-                        <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+                    <!-- NEW: Copy from existing trip section -->
+                    <div class="alert alert-info mb-4">
+                        <h5 class="alert-heading">
+                            <i class="bi bi-copy"></i> Copy from Existing Trip
+                        </h5>
+                        <p class="mb-2">
+                            Want to create the same trip for a different year? Search and select an existing trip below to auto-fill all fields.
+                        </p>
+                        <div class="position-relative">
+                            <input type="text"
+                                   id="tripSearchInput"
+                                   class="form-control"
+                                   placeholder="Start typing trip name, destination, or country..."
+                                   autocomplete="off" />
+                            <div id="autocompleteResults" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1000; max-height: 300px; overflow-y: auto; display: none;">
+                                <!-- Autocomplete results will appear here -->
+                            </div>
+                        </div>
+                        <small class="text-muted">
+                            <i class="bi bi-info-circle"></i> This will copy all details except dates, which you can customize for the new year.
+                        </small>
+                    </div>
+
+                    <form asp-action="CreateTrip" method="post" id="createTripForm">
+                        @if (!ViewData.ModelState.IsValid)
+                        {
+                            var startDateErrors = ViewData.ModelState["StartDate"]?.Errors;
+                            var generalErrors = ViewData.ModelState[""]?.Errors;
+
+                            @if (startDateErrors != null && startDateErrors.Any())
+                            {
+                                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                                    <h5 class="alert-heading">
+                                        <i class="bi bi-exclamation-triangle-fill"></i> Duplicate Year Detected
+                                    </h5>
+                                    @foreach (var error in startDateErrors)
+                                    {
+                                        <p class="mb-1">@error.ErrorMessage</p>
+                                    }
+                                    @if (generalErrors != null && generalErrors.Any())
+                                    {
+                                        @foreach (var error in generalErrors)
+                                        {
+                                            <p class="mb-1">@error.ErrorMessage</p>
+                                        }
+                                    }
+                                    <hr>
+                                    <p class="mb-0">
+                                        <strong>What to do:</strong>
+                                    </p>
+                                    <ul class="mb-0">
+                                        <li>Change the <strong>Date</strong> to a different year</li>
+                                        <li>Or edit the existing trip instead of creating a new one</li>
+                                        <li>Or search for a different trip template</li>
+                                    </ul>
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            }
+                            else
+                            {
+                                <div asp-validation-summary="All" class="alert alert-danger alert-dismissible fade show" role="alert">
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            }
+                        }
+
+                        <!-- Hidden field to track source trip -->
+                        <input type="hidden" asp-for="SourceTripId" id="sourceTripId" />
 
                         <!-- Basic Info -->
                         <h5 class="border-bottom pb-2 mb-3">Basic Information</h5>
@@ -112,12 +196,12 @@
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label asp-for="MinimumAge" class="form-label"></label>
-                                <input asp-for="MinimumAge" class="form-control" type="number" placeholder="Optional" />
+                                <input asp-for="MinimumAge" class="form-control" type="number" id="minimumAge" placeholder="Optional" />
                                 <span asp-validation-for="MinimumAge" class="text-danger"></span>
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label asp-for="MaximumAge" class="form-label"></label>
-                                <input asp-for="MaximumAge" class="form-control" type="number" placeholder="Optional" />
+                                <input asp-for="MaximumAge" class="form-control" type="number" id="maximumAge" placeholder="Optional" />
                                 <span asp-validation-for="MaximumAge" class="text-danger"></span>
                             </div>
                         </div>
@@ -136,153 +220,95 @@
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label asp-for="LastBookingDate" class="form-label"></label>
-                                <input asp-for="LastBookingDate" class="form-control" type="date" />
+                                <input asp-for="LastBookingDate" class="form-control" type="date" id="lastBookingDate" />
                                 <span asp-validation-for="LastBookingDate" class="text-danger"></span>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label asp-for="CancellationDaysLimit" class="form-label"></label>
                                 <div class="input-group">
-                                    <input asp-for="CancellationDaysLimit" class="form-control" type="number" />
+                                    <input asp-for="CancellationDaysLimit" class="form-control" type="number" id="cancellationDaysLimit" />
                                     <span class="input-group-text">days before trip</span>
                                 </div>
                                 <span asp-validation-for="CancellationDaysLimit" class="text-danger"></span>
                             </div>
                         </div>
 
-                        <div class="mb-3 form-check">
-                            <input asp-for="IsVisible" class="form-check-input" />
-                            <label asp-for="IsVisible" class="form-check-label">
-                                Make this trip visible to users
-                            </label>
+                        <div class="form-check mb-3">
+                            <input asp-for="IsVisible" class="form-check-input" type="checkbox" id="isVisible" checked />
+                            <label asp-for="IsVisible" class="form-check-label"></label>
                         </div>
-                        <h5 class="border-bottom pb-2 mb-3 mt-4">Reminders (Email)</h5>
-                        <p class="text-muted small mb-2">
-                            Add multiple reminders (e.g., 7 days before, 1 month before). They will be emailed to all users who booked this trip.
+
+                        <!-- Trip Reminders -->
+                        <h5 class="border-bottom pb-2 mb-3 mt-4">
+                            <i class="bi bi-bell"></i> Trip Reminders
+                        </h5>
+                        <p class="text-muted small">
+                            Set up automatic reminders that will be sent to users before their trip starts.
                         </p>
 
                         <div id="remindersContainer">
-                            @for (int i = 0; i < (Model.ReminderRules.Count == 0 ? 1 : Model.ReminderRules.Count); i++)
-                            {
-                                <div class="row align-items-end mb-2 reminder-row">
-                                    <div class="col-md-4">
-                                        <label class="form-label">Amount</label>
-                                        <input class="form-control"
-                                               name="ReminderRules[@i].OffsetAmount"
-                                               type="number"
-                                               value="@(Model.ReminderRules.Count == 0 ? 7 : Model.ReminderRules[i].OffsetAmount)" />
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label">Unit</label>
-                                        <select class="form-select" name="ReminderRules[@i].OffsetUnit">
-                                            <option value="Days">Days</option>
-                                            <option value="Months">Months</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label">Active</label>
-                                        <input class="form-check-input ms-2" type="checkbox" name="ReminderRules[@i].IsActive" value="true" checked />
-                                    </div>
-                                    <div class="col-md-1 text-end">
-                                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeReminderRow(this)">X</button>
-                                    </div>
-                                </div>
-                            }
+                            <!-- Reminder rows will be added here dynamically -->
                         </div>
 
                         <button type="button" class="btn btn-outline-primary btn-sm mt-2" onclick="addReminderRow()">
-                            <i class="bi bi-plus"></i> Add reminder
+                            <i class="bi bi-plus-circle"></i> Add Reminder Rule
                         </button>
 
-                        
-
-                        <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
-                            <a asp-action="ManageTrips" class="btn btn-outline-secondary">
-                                <i class="bi bi-x-circle"></i> Cancel
-                            </a>
-                            <button type="submit" class="btn btn-primary">
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-success btn-lg">
                                 <i class="bi bi-check-circle"></i> Create Trip
                             </button>
+                            <a asp-action="ManageTrips" class="btn btn-secondary">
+                                <i class="bi bi-x-circle"></i> Cancel
+                            </a>
                         </div>
                     </form>
                 </div>
             </div>
         </div>
 
-        <!-- Live Preview Card -->
+        <!-- Live Preview Card (existing code continues...) -->
         <div class="col-md-4">
             <div class="card shadow sticky-top" style="top: 20px;">
-                <div class="card-header bg-secondary text-white">
+                <div class="card-header bg-light">
                     <h5 class="mb-0"><i class="bi bi-eye"></i> Live Preview</h5>
                 </div>
                 <div class="card-body p-0">
-                    <div class="card border-0">
-                        <!-- Preview Image -->
-                        <div id="previewImageContainer">
-                            <div class="bg-light d-flex align-items-center justify-content-center"
-                                 id="previewNoImage" style="height: 180px;">
-                                <div class="text-center text-muted">
-                                    <i class="bi bi-image fs-1"></i>
-                                    <p class="mb-0 small">Add image URL to preview</p>
-                                </div>
-                            </div>
-                            <img id="previewImage" src="" alt="Preview"
-                                 style="height: 180px; width: 100%; object-fit: cover; display: none;">
+                    <div class="position-relative" style="height: 200px; overflow: hidden;">
+                        <img id="previewImage"
+                             src=""
+                             alt="Trip preview"
+                             class="w-100 h-100"
+                             style="object-fit: cover; display: none;" />
+                        <div id="previewNoImage"
+                             class="w-100 h-100 d-flex align-items-center justify-content-center bg-secondary text-white"
+                             style="display: flex;">
+                            <i class="bi bi-image" style="font-size: 3rem;"></i>
+                        </div>
+                        <div class="position-absolute top-0 start-0 m-2">
+                            <span id="previewBadge" class="badge bg-primary" style="display: none;">
+                                Package Type
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="p-3">
+                        <h5 class="card-title mb-2" id="previewTitle">Package Name</h5>
+                        <p class="text-muted small mb-2" id="previewLocation">
+                            <i class="bi bi-geo-alt"></i> Destination, Country
+                        </p>
+                        <p class="text-muted small mb-3" id="previewDates">
+                            <i class="bi bi-calendar"></i> Select dates
+                        </p>
+
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h4 class="text-success mb-0" id="previewPrice">$0</h4>
+                            <small class="text-muted">per room</small>
                         </div>
 
-                        <!-- Preview Badge -->
-                        <span class="position-absolute bottom-0 start-0 badge bg-primary m-2" id="previewBadge"
-                              style="display: none;">
-                            Family
-                        </span>
-
-                        <div class="card-body">
-                            <h5 class="card-title" id="previewTitle">Package Name</h5>
-                            <p class="card-text text-muted mb-1" id="previewLocation">
-                                <i class="bi bi-geo-alt"></i> <span>Destination, Country</span>
-                            </p>
-                            <p class="card-text text-muted mb-2" id="previewDates">
-                                <i class="bi bi-calendar"></i> <span>Select dates</span>
-                            </p>
-
-                            <!-- Preview Rating (Static for preview) -->
-                            <div class="mb-2">
-                                <i class="bi bi-star text-warning"></i>
-                                <i class="bi bi-star text-warning"></i>
-                                <i class="bi bi-star text-warning"></i>
-                                <i class="bi bi-star text-warning"></i>
-                                <i class="bi bi-star text-warning"></i>
-                                <small class="text-muted">(New)</small>
-                            </div>
-
-                            <!-- Preview Price -->
-                            <div class="mb-2">
-                                <span class="fs-4 fw-bold text-primary" id="previewPrice">$0</span>
-                                <small class="text-muted">/ person</small>
-                            </div>
-
-                            <!-- Preview Availability -->
-                            <p class="mb-0" id="previewRooms">
-                                <span class="text-success">
-                                    <i class="bi bi-check-circle"></i> <span>10 rooms available</span>
-                                </span>
-                            </p>
-                        </div>
-
-                        <div class="card-footer bg-white">
-                            <div class="d-grid gap-2">
-                                <button class="btn btn-outline-primary btn-sm" disabled>
-                                    <i class="bi bi-eye"></i> View Details
-                                </button>
-                                <div class="btn-group btn-group-sm">
-                                    <button class="btn btn-primary" disabled>
-                                        <i class="bi bi-calendar-plus"></i> Book
-                                    </button>
-                                    <button class="btn btn-success" disabled>
-                                        <i class="bi bi-cart-plus"></i> Buy Now
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                        <p class="small mb-0" id="previewRooms">
+                            <span class="text-success"><i class="bi bi-check-circle"></i> 10 rooms available</span>
+                        </p>
                     </div>
                 </div>
             </div>
@@ -291,12 +317,142 @@
 </div>
 
 @section Scripts {
-    <partial name="_ValidationScriptsPartial" />
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
 
-    <!-- Load Countries API for AutoComplete -->
+    <!-- NEW: Trip Autocomplete Script -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Load all countries from REST Countries API
+            const searchInput = document.getElementById('tripSearchInput');
+            const resultsContainer = document.getElementById('autocompleteResults');
+            const sourceTripIdInput = document.getElementById('sourceTripId');
+            let searchTimeout;
+
+            // Autocomplete search
+            searchInput.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                const term = this.value.trim();
+
+                if (term.length < 2) {
+                    resultsContainer.style.display = 'none';
+                    return;
+                }
+
+                searchTimeout = setTimeout(() => {
+                    fetch(`/Admin/SearchTripsAutocomplete?term=${encodeURIComponent(term)}`)
+                        .then(response => response.json())
+                        .then(trips => {
+                            resultsContainer.innerHTML = '';
+
+                            if (trips.length === 0) {
+                                resultsContainer.innerHTML = '<div class="list-group-item text-muted">No trips found</div>';
+                            } else {
+                                trips.forEach(trip => {
+                                    const item = document.createElement('a');
+                                    item.href = '#';
+                                    item.className = 'list-group-item list-group-item-action';
+                                    item.innerHTML = `
+                                        <div class="d-flex w-100 justify-content-between">
+                                            <h6 class="mb-1">${trip.packageName}</h6>
+                                            <small class="text-muted">${trip.year}</small>
+                                        </div>
+                                        <p class="mb-0"><small class="text-muted">${trip.destination}, ${trip.country}</small></p>
+                                    `;
+                                    item.addEventListener('click', (e) => {
+                                        e.preventDefault();
+                                        loadTripTemplate(trip.tripId, trip.displayText);
+                                    });
+                                    resultsContainer.appendChild(item);
+                                });
+                            }
+
+                            resultsContainer.style.display = 'block';
+                        })
+                        .catch(error => {
+                            console.error('Error fetching trips:', error);
+                        });
+                }, 300);
+            });
+
+            // Close autocomplete when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!searchInput.contains(e.target) && !resultsContainer.contains(e.target)) {
+                    resultsContainer.style.display = 'none';
+                }
+            });
+
+            // Load trip template
+            function loadTripTemplate(tripId, displayText) {
+                fetch(`/Admin/GetTripTemplate?id=${tripId}`)
+                    .then(response => response.json())
+                    .then(template => {
+                        // Set source trip ID
+                        sourceTripIdInput.value = tripId;
+
+                        // Fill form fields
+                        document.getElementById('packageName').value = template.packageName;
+                        document.getElementById('destination').value = template.destination;
+                        document.getElementById('country').value = template.country;
+                        document.getElementById('price').value = template.price;
+                        document.getElementById('totalRooms').value = template.totalRooms;
+                        document.getElementById('packageType').value = template.packageType;
+                        document.getElementById('minimumAge').value = template.minimumAge || '';
+                        document.getElementById('maximumAge').value = template.maximumAge || '';
+                        document.getElementById('description').value = template.description;
+                        document.getElementById('mainImageUrl').value = template.mainImageUrl || '';
+                        document.getElementById('isVisible').checked = template.isVisible;
+                        document.getElementById('cancellationDaysLimit').value = template.cancellationDaysLimit;
+
+                        // Calculate new dates based on duration
+                        const today = new Date();
+                        const nextYear = new Date(today.getFullYear() + 1, today.getMonth(), today.getDate());
+                        const startDate = nextYear.toISOString().split('T')[0];
+
+                        const endDate = new Date(nextYear);
+                        endDate.setDate(endDate.getDate() + template.tripDurationDays);
+                        const endDateStr = endDate.toISOString().split('T')[0];
+
+                        document.getElementById('startDate').value = startDate;
+                        document.getElementById('endDate').value = endDateStr;
+
+                        // Load reminder rules
+                        const remindersContainer = document.getElementById('remindersContainer');
+                        remindersContainer.innerHTML = '';
+                        template.reminderRules.forEach((rule, index) => {
+                            addReminderRowWithData(rule, index);
+                        });
+
+                        // Update preview
+                        updatePreview();
+
+                        // Clear search and hide results
+                        searchInput.value = `✓ Copied from: ${displayText}`;
+                        resultsContainer.style.display = 'none';
+
+                        // Show success message
+                        const alert = document.createElement('div');
+                        alert.className = 'alert alert-success alert-dismissible fade show mt-3';
+                        alert.innerHTML = `
+                            <i class="bi bi-check-circle"></i> <strong>Template loaded!</strong>
+                            All fields have been filled from the selected trip.
+                            Review and adjust the dates for your new year.
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        `;
+                        document.querySelector('form').insertBefore(alert, document.querySelector('form').firstChild);
+                    })
+                    .catch(error => {
+                        console.error('Error loading template:', error);
+                        alert('Failed to load trip template. Please try again.');
+                    });
+            }
+        });
+    </script>
+
+    <!-- Existing scripts... -->
+    <script>
+        // Load countries for autocomplete
+        document.addEventListener('DOMContentLoaded', function() {
             fetch('https://restcountries.com/v3.1/all')
                 .then(response => response.json())
                 .then(countries => {
@@ -316,6 +472,7 @@
                 .catch(error => console.error('Failed to load countries:', error));
         });
     </script>
+
     <script>
         function addReminderRow() {
             const container = document.getElementById("remindersContainer");
@@ -345,13 +502,40 @@
             container.appendChild(div);
         }
 
+        // NEW: Add reminder row with pre-filled data
+        function addReminderRowWithData(rule, index) {
+            const container = document.getElementById("remindersContainer");
+
+            const div = document.createElement("div");
+            div.className = "row align-items-end mb-2 reminder-row";
+            div.innerHTML = `
+                <div class="col-md-4">
+                    <label class="form-label">Amount</label>
+                    <input class="form-control" name="ReminderRules[${index}].OffsetAmount" type="number" value="${rule.offsetAmount}" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Unit</label>
+                    <select class="form-select" name="ReminderRules[${index}].OffsetUnit">
+                        <option value="Days" ${rule.offsetUnit === 0 ? 'selected' : ''}>Days</option>
+                        <option value="Months" ${rule.offsetUnit === 1 ? 'selected' : ''}>Months</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Active</label>
+                    <input class="form-check-input ms-2" type="checkbox" name="ReminderRules[${index}].IsActive" value="true" ${rule.isActive ? 'checked' : ''} />
+                </div>
+                <div class="col-md-1 text-end">
+                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeReminderRow(this)">X</button>
+                </div>`;
+            container.appendChild(div);
+        }
+
         function removeReminderRow(btn) {
             const row = btn.closest(".reminder-row");
             row.remove();
             reindexReminderRows();
         }
 
-        // חובה כדי שה־ModelBinder לא יישבר אחרי מחיקות
         function reindexReminderRows() {
             const rows = document.querySelectorAll("#remindersContainer .reminder-row");
             rows.forEach((row, i) => {
@@ -442,6 +626,23 @@
         // Initialize preview on page load
         document.addEventListener('DOMContentLoaded', function() {
             updatePreview();
+        });
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // If there's a StartDate error, highlight and focus it
+            var startDateErrors = document.querySelector('[data-valmsg-for="StartDate"]');
+            if (startDateErrors && startDateErrors.textContent.trim() !== '') {
+                var startDateInput = document.getElementById('startDate');
+                if (startDateInput) {
+                    startDateInput.classList.add('is-invalid');
+                    startDateInput.focus();
+
+                    // Smooth scroll to the dates section
+                    startDateInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
         });
     </script>
 }

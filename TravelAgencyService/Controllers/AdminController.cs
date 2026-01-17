@@ -70,6 +70,80 @@ namespace TravelAgencyService.Controllers
 
         #region Trip Management
 
+
+        #region Trip Clone & Autocomplete
+
+        // API: Autocomplete search for existing trips
+        [HttpGet]
+        public async Task<IActionResult> SearchTripsAutocomplete(string term)
+        {
+            if (string.IsNullOrWhiteSpace(term) || term.Length < 2)
+            {
+                return Json(new List<TripAutocompleteDto>());
+            }
+
+            var trips = await _context.Trips
+                .Where(t => t.PackageName.Contains(term) ||
+                            t.Destination.Contains(term) ||
+                            t.Country.Contains(term))
+                .OrderByDescending(t => t.CreatedAt)
+                .Take(10)
+                .Select(t => new TripAutocompleteDto
+                {
+                    TripId = t.TripId,
+                    PackageName = t.PackageName,
+                    Destination = t.Destination,
+                    Country = t.Country,
+                    Year = t.StartDate.Year,
+                    DisplayText = $"{t.PackageName} - {t.Destination}, {t.Country} ({t.StartDate.Year})"
+                })
+                .ToListAsync();
+
+            return Json(trips);
+        }
+
+        // API: Load trip template data by ID
+        [HttpGet]
+        public async Task<IActionResult> GetTripTemplate(int id)
+        {
+            var trip = await _context.Trips
+                .Include(t => t.ReminderRules)
+                .FirstOrDefaultAsync(t => t.TripId == id);
+
+            if (trip == null)
+            {
+                return NotFound();
+            }
+
+            var template = new TripTemplateDto
+            {
+                TripId = trip.TripId,
+                PackageName = trip.PackageName,
+                Destination = trip.Destination,
+                Country = trip.Country,
+                Price = trip.Price,
+                TotalRooms = trip.TotalRooms,
+                PackageType = trip.PackageType,
+                MinimumAge = trip.MinimumAge,
+                MaximumAge = trip.MaximumAge,
+                Description = trip.Description,
+                MainImageUrl = trip.MainImageUrl,
+                IsVisible = trip.IsVisible,
+                LastBookingDate = trip.LastBookingDate,
+                CancellationDaysLimit = trip.CancellationDaysLimit,
+                TripDurationDays = (trip.EndDate - trip.StartDate).Days,
+                ReminderRules = trip.ReminderRules?.Select(r => new ReminderRuleInput
+                {
+                    OffsetAmount = r.OffsetAmount,
+                    OffsetUnit = r.OffsetUnit,
+                    IsActive = r.IsActive
+                }).ToList() ?? new List<ReminderRuleInput>()
+            };
+
+            return Json(template);
+        }
+
+        #endregion
         // GET: /Admin/ManageTrips
         public async Task<IActionResult> ManageTrips(string? searchQuery, PackageType? packageType, int page = 1)
         {
@@ -140,6 +214,82 @@ namespace TravelAgencyService.Controllers
 
             if (ModelState.IsValid)
             {
+                string? recurringGroupKey = null;
+                Trip? sourceTrip = null;
+
+                // If cloning from an existing trip, get or generate the RecurringGroupKey
+                if (model.SourceTripId.HasValue)
+                {
+                    sourceTrip = await _context.Trips
+                        .FirstOrDefaultAsync(t => t.TripId == model.SourceTripId.Value);
+
+                    if (sourceTrip != null)
+                    {
+                        // Use existing RecurringGroupKey or generate new one
+                        recurringGroupKey = sourceTrip.RecurringGroupKey ?? Guid.NewGuid().ToString();
+
+                        // Update source trip if it doesn't have a key yet (first time cloning)
+                        if (string.IsNullOrEmpty(sourceTrip.RecurringGroupKey))
+                        {
+                            sourceTrip.RecurringGroupKey = recurringGroupKey;
+                            _context.Trips.Update(sourceTrip);
+                            await _context.SaveChangesAsync();
+                        }
+                    }
+                }
+
+                // CHECK FOR DUPLICATE: Same RecurringGroupKey + Same Year
+                if (!string.IsNullOrEmpty(recurringGroupKey))
+                {
+                    var targetYear = model.StartDate.Year;
+
+                    var existingTrip = await _context.Trips
+                        .Where(t => t.RecurringGroupKey == recurringGroupKey &&
+                                   t.StartDate.Year == targetYear)
+                        .Select(t => new {
+                            t.TripId,
+                            t.PackageName,
+                            t.Destination,
+                            t.Country,
+                            t.StartDate
+                        })
+                        .FirstOrDefaultAsync();
+
+                    if (existingTrip != null)
+                    {
+                        // Show clear, user-friendly error message
+                        var existingDate = existingTrip.StartDate.ToString("MMM dd, yyyy");
+
+                        ModelState.AddModelError("StartDate",
+                            $"⚠️ A trip from this series already exists for year {targetYear}!");
+
+                        ModelState.AddModelError("",
+                            $"Existing Trip: '{existingTrip.PackageName}' " +
+                            $"({existingTrip.Destination}, {existingTrip.Country}) " +
+                            $"starting on {existingDate}. " +
+                            $"Please choose a different year or edit the existing trip.");
+
+                        // Add suggestion for available years
+                        var existingYears = await _context.Trips
+                            .Where(t => t.RecurringGroupKey == recurringGroupKey)
+                            .Select(t => t.StartDate.Year)
+                            .OrderBy(y => y)
+                            .ToListAsync();
+
+                        var suggestedYear = targetYear + 1;
+                        while (existingYears.Contains(suggestedYear))
+                        {
+                            suggestedYear++;
+                        }
+
+                        TempData["Warning"] = $"💡 Tip: This trip already exists for years: {string.Join(", ", existingYears)}. " +
+                                             $"Try using year {suggestedYear} instead.";
+
+                        return View(model);
+                    }
+                }
+
+                // Create the new trip
                 var trip = new Trip
                 {
                     PackageName = model.PackageName,
@@ -158,12 +308,14 @@ namespace TravelAgencyService.Controllers
                     IsVisible = model.IsVisible,
                     LastBookingDate = model.LastBookingDate,
                     CancellationDaysLimit = model.CancellationDaysLimit,
+                    RecurringGroupKey = recurringGroupKey,
                     CreatedAt = DateTime.Now,
                     UpdatedAt = DateTime.Now
                 };
 
                 try
                 {
+                    // Geocoding for map location
                     using (var httpClient = new HttpClient())
                     {
                         httpClient.DefaultRequestHeaders.Add("User-Agent", "TravelAgencyApp/1.0");
@@ -180,35 +332,63 @@ namespace TravelAgencyService.Controllers
                         }
                     }
                 }
-                catch (Exception ex)
+                catch
                 {
-                    Console.WriteLine($"Geocoding failed: {ex.Message}");
+                    // Geocoding failed, continue without coordinates
                 }
 
-                _context.Trips.Add(trip);
-                await _context.SaveChangesAsync();
-                if (model.ReminderRules != null && model.ReminderRules.Any())
+                try
                 {
-                    var rules = model.ReminderRules
-                        .Where(r => r.OffsetAmount > 0 && r.IsActive)
-                        .Select(r => new TripReminderRule
-                        {
-                            TripId = trip.TripId,
-                            OffsetAmount = r.OffsetAmount,
-                            OffsetUnit = r.OffsetUnit,
-                            IsActive = true
-                        })
-                        .ToList();
+                    _context.Trips.Add(trip);
+                    await _context.SaveChangesAsync();
 
-                    if (rules.Any())
+                    // Add reminder rules
+                    if (model.ReminderRules != null && model.ReminderRules.Any())
                     {
-                        _context.TripReminderRules.AddRange(rules);
+                        foreach (var rule in model.ReminderRules)
+                        {
+                            var reminderRule = new TripReminderRule
+                            {
+                                TripId = trip.TripId,
+                                OffsetAmount = rule.OffsetAmount,
+                                OffsetUnit = rule.OffsetUnit,
+                                IsActive = rule.IsActive
+                            };
+                            _context.TripReminderRules.Add(reminderRule);
+                        }
                         await _context.SaveChangesAsync();
                     }
-                }
 
-                TempData["Success"] = $"Trip '{trip.PackageName}' created successfully!";
-                return RedirectToAction(nameof(ManageTrips));
+                    TempData["Success"] = $"✓ Trip '{trip.PackageName}' created successfully for {trip.StartDate.Year}!";
+
+                    if (model.SourceTripId.HasValue)
+                    {
+                        TempData["Success"] += $" (Cloned from Trip ID: {model.SourceTripId.Value})";
+                    }
+
+                    return RedirectToAction(nameof(ManageTrips));
+                }
+                catch (DbUpdateException ex)
+                {
+                    // Handle database-level constraint violations (as a safety net)
+                    if (ex.InnerException?.Message.Contains("IX_Trips_RecurringGroupKey_StartYear") == true)
+                    {
+                        ModelState.AddModelError("StartDate",
+                            $"⚠️ A trip with this recurring group already exists for year {model.StartDate.Year}.");
+
+                        ModelState.AddModelError("",
+                            "This error occurred at the database level. " +
+                            "Please choose a different year and try again.");
+
+                        TempData["Error"] = "Database constraint prevented duplicate trip. Please choose a different year.";
+                    }
+                    else
+                    {
+                        ModelState.AddModelError("", $"Database error: {ex.InnerException?.Message ?? ex.Message}");
+                    }
+
+                    return View(model);
+                }
             }
 
             return View(model);
@@ -263,7 +443,7 @@ namespace TravelAgencyService.Controllers
             return View(model);
         }
 
-        // POST: /Admin/EditTrip/5
+        // POST: /Admin/EditTrip
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> EditTrip(int id, TripEditViewModel model)
@@ -368,11 +548,19 @@ namespace TravelAgencyService.Controllers
             return View(model);
         }
 
-        // GET: /Admin/DeleteTrip/5
-        public async Task<IActionResult> DeleteTrip(int id)
+        // GET: /Admin/DeleteTrip
+        public async Task<IActionResult> DeleteTrip(int? id)
         {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
             var trip = await _context.Trips
                 .Include(t => t.Bookings)
+                .Include(t => t.WaitingList)
+                .Include(t => t.Reviews)
+                .Include(t => t.CartItems)
                 .FirstOrDefaultAsync(t => t.TripId == id);
 
             if (trip == null)
@@ -380,10 +568,27 @@ namespace TravelAgencyService.Controllers
                 return NotFound();
             }
 
+            // Check if trip has any bookings
+            var bookingsCount = trip.Bookings?.Count ?? 0;
+            var waitingListCount = trip.WaitingList?.Count ?? 0;
+            var reviewsCount = trip.Reviews?.Count ?? 0;
+            var cartItemsCount = trip.CartItems?.Count ?? 0;
+
+            // Calculate total dependencies
+            var totalDependencies = bookingsCount + waitingListCount + reviewsCount + cartItemsCount;
+
+            ViewBag.BookingsCount = bookingsCount;
+            ViewBag.WaitingListCount = waitingListCount;
+            ViewBag.ReviewsCount = reviewsCount;
+            ViewBag.CartItemsCount = cartItemsCount;
+            ViewBag.TotalDependencies = totalDependencies;
+            ViewBag.CanDelete = bookingsCount == 0; // Can only delete if no bookings
+
             return View(trip);
         }
 
-        // POST: /Admin/DeleteTrip/5
+
+        // POST: /Admin/DeleteTripConfirmed
         [HttpPost, ActionName("DeleteTrip")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteTripConfirmed(int id)
@@ -397,20 +602,33 @@ namespace TravelAgencyService.Controllers
                 return NotFound();
             }
 
-            if (trip.Bookings != null && trip.Bookings.Any(b => b.Status == BookingStatus.Confirmed))
+            // CRITICAL CHECK: Prevent deletion if trip has bookings
+            var bookingsCount = trip.Bookings?.Count ?? 0;
+            if (bookingsCount > 0)
             {
-                TempData["Error"] = "Cannot delete trip with active bookings. Cancel all bookings first.";
+                TempData["Error"] = $"❌ Cannot delete trip '{trip.PackageName}' because it has {bookingsCount} booking(s). " +
+                                   "Trips with bookings cannot be deleted to maintain data integrity.";
                 return RedirectToAction(nameof(ManageTrips));
             }
 
-            _context.Trips.Remove(trip);
-            await _context.SaveChangesAsync();
+            try
+            {
+                // Safe to delete - no bookings exist
+                // Cascade will handle: Images, WaitingList, Reviews, CartItems, ReminderRules
+                _context.Trips.Remove(trip);
+                await _context.SaveChangesAsync();
 
-            TempData["Success"] = $"Trip '{trip.PackageName}' deleted successfully!";
-            return RedirectToAction(nameof(ManageTrips));
+                TempData["Success"] = $"✓ Trip '{trip.PackageName}' deleted successfully!";
+                return RedirectToAction(nameof(ManageTrips));
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"❌ Error deleting trip: {ex.Message}";
+                return RedirectToAction(nameof(ManageTrips));
+            }
         }
 
-        // GET: /Admin/SetDiscount/5
+        // GET: /Admin/SetDiscount
         public async Task<IActionResult> SetDiscount(int id)
         {
             var trip = await _context.Trips.FindAsync(id);
@@ -432,7 +650,7 @@ namespace TravelAgencyService.Controllers
             return View(model);
         }
 
-        // POST: /Admin/SetDiscount/5
+        // POST: /Admin/SetDiscount
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> SetDiscount(int id, TripDiscountViewModel model)
@@ -484,7 +702,7 @@ namespace TravelAgencyService.Controllers
             return View(model);
         }
 
-        // POST: /Admin/RemoveDiscount/5
+        // POST: /Admin/RemoveDiscount
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RemoveDiscount(int id)
