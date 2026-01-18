@@ -114,7 +114,7 @@ public class PayPalClient
 
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/v2/checkout/orders/{orderId}/capture");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
+        req.Content = new StringContent("{}", Encoding.UTF8, "application/json");
         var res = await _http.SendAsync(req, ct);
         var json = await res.Content.ReadAsStringAsync(ct);
 
