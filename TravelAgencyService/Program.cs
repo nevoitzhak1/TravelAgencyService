@@ -58,6 +58,15 @@ using (var scope = app.Services.CreateScope())
         logger.LogError(ex, "An error occurred while seeding the database.");
     }
 }
+using (var scope = app.Services.CreateScope())
+{
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+    await DemoUsersSeeder.SeedAsync(userManager, roleManager, db);
+}
+
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
